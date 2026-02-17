@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { parseNfo, serializeNfo, emptyNfoData, type NfoData } from './lib/nfoParser'
 import FileList from './components/FileList'
 import MetadataEditor from './components/MetadataEditor'
@@ -18,6 +18,26 @@ function parentName(p: string): string {
   return parts.pop() ?? p
 }
 
+const isElectron = !!window.electronAPI
+
+// Browser fallback: store FileSystemFileHandle per path for read/write
+type FileHandleMap = Map<string, FileSystemFileHandle>
+
+async function scanNfoFilesFromDir(
+  dirHandle: FileSystemDirectoryHandle,
+  handles: FileHandleMap,
+  pathPrefix: string,
+) {
+  for await (const entry of (dirHandle as any).values()) {
+    const entryPath = `${pathPrefix}/${entry.name}`
+    if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.nfo')) {
+      handles.set(entryPath, entry as FileSystemFileHandle)
+    } else if (entry.kind === 'directory') {
+      await scanNfoFilesFromDir(entry as FileSystemDirectoryHandle, handles, entryPath)
+    }
+  }
+}
+
 export default function App() {
   const [nfoFiles, setNfoFiles] = useState<NfoFile[]>([])
   const [filterText, setFilterText] = useState('')
@@ -30,36 +50,83 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [folderPath, setFolderPath] = useState<string>('')
 
+  // Browser-only: file handle map for File System Access API
+  const fileHandles = useRef<FileHandleMap>(new Map())
+  const isPickerOpen = useRef(false)
+
   const handleOpenFolder = useCallback(async () => {
-    const fp = await window.electronAPI.openFolder()
-    if (!fp) return
-    setFolderPath(fp)
-    const files = await window.electronAPI.scanNfoFiles(fp)
-    const list: NfoFile[] = files.map(f => ({
-      filePath: f,
-      folderName: parentName(f),
-      fileName: basename(f),
-    }))
-    setNfoFiles(list)
+    if (isPickerOpen.current) return
+    isPickerOpen.current = true
+    try {
+    if (isElectron) {
+      const fp = await window.electronAPI!.openFolder()
+      if (!fp) return
+      setFolderPath(fp)
+      const files = await window.electronAPI!.scanNfoFiles(fp)
+      const list: NfoFile[] = files.map(f => ({
+        filePath: f,
+        folderName: parentName(f),
+        fileName: basename(f),
+      }))
+      setNfoFiles(list)
+    } else {
+      // Browser fallback using File System Access API
+      if (!('showDirectoryPicker' in window)) {
+        alert('Your browser does not support the File System Access API. Please use Chrome/Edge.')
+        return
+      }
+      try {
+        const dirHandle = await window.showDirectoryPicker!()
+        const handles: FileHandleMap = new Map()
+        await scanNfoFilesFromDir(dirHandle, handles, dirHandle.name)
+        fileHandles.current = handles
+        setFolderPath(dirHandle.name)
+        const list: NfoFile[] = Array.from(handles.keys()).map(fp => ({
+          filePath: fp,
+          folderName: parentName(fp),
+          fileName: basename(fp),
+        }))
+        setNfoFiles(list)
+      } catch (e: unknown) {
+        // User cancelled the picker or picker already active
+        if (e instanceof DOMException && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return
+        throw e
+      }
+    }
     setSelectedFile(null)
     setCurrentData(null)
     setIsDirty(false)
     setDirtyFiles(new Set())
     setFilterText('')
     setSaveStatus('idle')
+    } finally {
+      isPickerOpen.current = false
+    }
   }, [])
 
   const handleSelectFile = useCallback(async (file: NfoFile) => {
     setSelectedFile(file)
     setSaveStatus('idle')
-    const result = await window.electronAPI.readFile(file.filePath)
-    if (!result.success || !result.content) {
+
+    let content: string | undefined
+    if (isElectron) {
+      const result = await window.electronAPI!.readFile(file.filePath)
+      if (!result.success) content = undefined
+      else content = result.content
+    } else {
+      const handle = fileHandles.current.get(file.filePath)
+      if (!handle) { setCurrentData(emptyNfoData()); setIsDirty(false); return }
+      const fileObj = await handle.getFile()
+      content = await fileObj.text()
+    }
+
+    if (!content) {
       setCurrentData(emptyNfoData())
       setIsDirty(false)
       return
     }
     try {
-      const data = parseNfo(result.content)
+      const data = parseNfo(content)
       setCurrentData(data)
       setIsDirty(dirtyFiles.has(file.filePath))
     } catch {
@@ -82,8 +149,22 @@ export default function App() {
     setIsSaving(true)
     try {
       const xml = serializeNfo(currentData)
-      const result = await window.electronAPI.writeFile(selectedFile.filePath, xml)
-      if (result.success) {
+
+      let success = false
+      if (isElectron) {
+        const result = await window.electronAPI!.writeFile(selectedFile.filePath, xml)
+        success = result.success
+      } else {
+        const handle = fileHandles.current.get(selectedFile.filePath)
+        if (handle) {
+          const writable = await handle.createWritable()
+          await writable.write(xml)
+          await writable.close()
+          success = true
+        }
+      }
+
+      if (success) {
         setIsDirty(false)
         setSaveStatus('saved')
         setDirtyFiles(prev => {
