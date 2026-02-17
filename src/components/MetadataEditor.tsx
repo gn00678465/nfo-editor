@@ -9,6 +9,7 @@ import RatingsField from './RatingsField'
 import TierLabel from './TierLabel'
 import { Checkbox } from './ui/checkbox'
 import { Separator } from './ui/separator'
+import { DatePicker } from './ui/date-picker'
 import {
   Info, FileText, Tag, Users, Grid2X2, Home, CreditCard,
   Image as ImageIcon, Settings,
@@ -87,7 +88,7 @@ export default function MetadataEditor({ data, onChange }: MetadataEditorProps) 
             <input className={monoCls} type="number" value={str('year')} onChange={e => set('year', e.target.value)} min={1900} max={2099} />
           </Field>
           <Field label="Premiere Date" tier={1}>
-            <input className={monoCls} type="date" value={str('premiered')} onChange={e => set('premiered', e.target.value)} />
+            <DatePicker value={str('premiered')} onChange={v => set('premiered', v)} />
           </Field>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -112,7 +113,7 @@ export default function MetadataEditor({ data, onChange }: MetadataEditorProps) 
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <Field label="Release Date" tier={3} hint="<releasedate>">
-            <input className={monoCls} type="date" value={str('releasedate')} onChange={e => set('releasedate', e.target.value)} />
+            <DatePicker value={str('releasedate')} onChange={v => set('releasedate', v)} />
           </Field>
           <Field label="Tagline" tier={3}>
             <input className={inputCls} type="text" value={str('tagline')} onChange={e => set('tagline', e.target.value)} placeholder="Short tagline..." />
