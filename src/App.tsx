@@ -1,0 +1,234 @@
+import { useState, useCallback, useEffect } from 'react'
+import { parseNfo, serializeNfo, emptyNfoData, type NfoData } from './lib/nfoParser'
+import FileList from './components/FileList'
+import MetadataEditor from './components/MetadataEditor'
+
+export interface NfoFile {
+  filePath: string
+  folderName: string
+  fileName: string
+}
+
+function basename(p: string): string {
+  return p.replace(/\\/g, '/').split('/').pop() ?? p
+}
+function parentName(p: string): string {
+  const parts = p.replace(/\\/g, '/').split('/')
+  parts.pop()
+  return parts.pop() ?? p
+}
+
+export default function App() {
+  const [nfoFiles, setNfoFiles] = useState<NfoFile[]>([])
+  const [filterText, setFilterText] = useState('')
+  const [selectedFile, setSelectedFile] = useState<NfoFile | null>(null)
+  const [currentData, setCurrentData] = useState<NfoData | null>(null)
+  const [isDirty, setIsDirty] = useState(false)
+  // Track which files have unsaved changes by path
+  const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+  const [folderPath, setFolderPath] = useState<string>('')
+
+  const handleOpenFolder = useCallback(async () => {
+    const fp = await window.electronAPI.openFolder()
+    if (!fp) return
+    setFolderPath(fp)
+    const files = await window.electronAPI.scanNfoFiles(fp)
+    const list: NfoFile[] = files.map(f => ({
+      filePath: f,
+      folderName: parentName(f),
+      fileName: basename(f),
+    }))
+    setNfoFiles(list)
+    setSelectedFile(null)
+    setCurrentData(null)
+    setIsDirty(false)
+    setDirtyFiles(new Set())
+    setFilterText('')
+    setSaveStatus('idle')
+  }, [])
+
+  const handleSelectFile = useCallback(async (file: NfoFile) => {
+    setSelectedFile(file)
+    setSaveStatus('idle')
+    const result = await window.electronAPI.readFile(file.filePath)
+    if (!result.success || !result.content) {
+      setCurrentData(emptyNfoData())
+      setIsDirty(false)
+      return
+    }
+    try {
+      const data = parseNfo(result.content)
+      setCurrentData(data)
+      setIsDirty(dirtyFiles.has(file.filePath))
+    } catch {
+      setCurrentData(emptyNfoData())
+      setIsDirty(false)
+    }
+  }, [dirtyFiles])
+
+  const handleDataChange = useCallback((updated: NfoData) => {
+    setCurrentData(updated)
+    setIsDirty(true)
+    setSaveStatus('idle')
+    if (selectedFile) {
+      setDirtyFiles(prev => new Set(prev).add(selectedFile.filePath))
+    }
+  }, [selectedFile])
+
+  const handleSave = useCallback(async () => {
+    if (!selectedFile || !currentData || isSaving) return
+    setIsSaving(true)
+    try {
+      const xml = serializeNfo(currentData)
+      const result = await window.electronAPI.writeFile(selectedFile.filePath, xml)
+      if (result.success) {
+        setIsDirty(false)
+        setSaveStatus('saved')
+        setDirtyFiles(prev => {
+          const next = new Set(prev)
+          next.delete(selectedFile.filePath)
+          return next
+        })
+        setTimeout(() => setSaveStatus('idle'), 2000)
+      } else {
+        setSaveStatus('error')
+      }
+    } catch {
+      setSaveStatus('error')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [selectedFile, currentData, isSaving])
+
+  // ⌘S / Ctrl+S shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        handleSave()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleSave])
+
+  const filteredFiles = filterText.trim()
+    ? nfoFiles.filter(f =>
+        f.folderName.toLowerCase().includes(filterText.toLowerCase()) ||
+        f.fileName.toLowerCase().includes(filterText.toLowerCase())
+      )
+    : nfoFiles
+
+  return (
+    <div className="flex flex-col h-screen bg-base overflow-hidden">
+      {/* Titlebar */}
+      <div
+        className="titlebar-drag flex items-center justify-between px-4 shrink-0"
+        style={{ height: 32, background: 'var(--bg-base)', borderBottom: '1px solid var(--border-subtle)' }}
+      >
+        <span
+          className="no-drag font-title text-text-muted select-none"
+          style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}
+        >
+          NFO METADATA EDITOR
+        </span>
+      </div>
+
+      {/* Main layout */}
+      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 32px)' }}>
+        {/* LEFT PANEL */}
+        <FileList
+          files={filteredFiles}
+          allFiles={nfoFiles}
+          selectedFile={selectedFile}
+          dirtyFiles={dirtyFiles}
+          filterText={filterText}
+          onFilterChange={setFilterText}
+          onSelectFile={handleSelectFile}
+          onOpenFolder={handleOpenFolder}
+          folderPath={folderPath}
+        />
+
+        {/* RIGHT PANEL */}
+        <div className="flex flex-col flex-1 overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+          {/* Editor header */}
+          <div
+            className="flex items-center justify-between shrink-0 px-6"
+            style={{
+              height: 48,
+              background: 'var(--bg-base)',
+              borderBottom: '1px solid var(--border-subtle)',
+            }}
+          >
+            <span
+              className="font-mono text-text-muted truncate"
+              style={{ fontSize: 11 }}
+            >
+              {selectedFile ? selectedFile.filePath : 'No file selected'}
+            </span>
+            <div className="flex items-center gap-3 shrink-0 ml-4 no-drag">
+              {isDirty && (
+                <div
+                  className="unsaved-pulse rounded-full"
+                  style={{ width: 8, height: 8, background: 'var(--accent-amber)' }}
+                  title="Unsaved changes"
+                />
+              )}
+              <button
+                onClick={handleSave}
+                disabled={!isDirty || !selectedFile || isSaving}
+                style={{
+                  background: isDirty && selectedFile
+                    ? saveStatus === 'saved' ? '#10B981' : 'var(--accent-amber)'
+                    : 'var(--bg-elevated)',
+                  color: isDirty && selectedFile ? '#1A1000' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: 5,
+                  padding: '7px 16px',
+                  fontFamily: "'Syne', sans-serif",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  cursor: isDirty && selectedFile ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'background 150ms',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                {isSaving ? 'Saving…' : saveStatus === 'saved' ? 'Saved ✓' : 'Save'}
+                <span style={{ fontSize: 10, opacity: 0.6, fontFamily: "'DM Mono', monospace" }}>⌘S</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Editor content */}
+          <div className="flex-1 overflow-hidden">
+            {currentData ? (
+              <MetadataEditor data={currentData} onChange={handleDataChange} />
+            ) : (
+              <div
+                className="flex flex-col items-center justify-center h-full gap-3"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <p style={{ fontSize: 14 }}>Open a folder to get started</p>
+                <p style={{ fontSize: 12, opacity: 0.6 }}>Select a directory containing NFO files</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
