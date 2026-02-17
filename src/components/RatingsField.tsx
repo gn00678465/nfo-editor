@@ -1,5 +1,8 @@
 import { useCallback } from 'react'
 import type { RatingEntry } from '../lib/nfoParser'
+import { Button } from './ui/button'
+import { Checkbox } from './ui/checkbox'
+import { Plus, X } from 'lucide-react'
 
 interface RatingsFieldProps {
   ratings: RatingEntry[]
@@ -47,6 +50,7 @@ export default function RatingsField({ ratings, onChange }: RatingsFieldProps) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {ratings.length > 0 && (
         <div
+          className="font-mono"
           style={{
             display: 'grid',
             gridTemplateColumns: '120px 80px 100px auto 32px',
@@ -61,7 +65,6 @@ export default function RatingsField({ ratings, onChange }: RatingsFieldProps) {
               style={{
                 fontSize: 10,
                 color: 'var(--text-muted)',
-                fontFamily: "'DM Mono', monospace",
               }}
             >
               {h}
@@ -104,68 +107,32 @@ export default function RatingsField({ ratings, onChange }: RatingsFieldProps) {
             min={0}
             placeholder="0"
           />
-          <label style={{ display: 'flex', alignItems: 'center', paddingLeft: 8, cursor: 'pointer' }}>
-            <div
-              onClick={() => toggleDefault(i)}
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 3,
-                border: `1px solid ${r.default ? 'var(--accent-indigo)' : 'var(--border-default)'}`,
-                background: r.default ? 'var(--accent-indigo)' : 'var(--bg-input)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'all 150ms',
-              }}
-            >
-              {r.default && (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              )}
-            </div>
-          </label>
-          <button
+          <div className="flex items-center pl-2">
+            <Checkbox
+              checked={r.default}
+              onCheckedChange={() => toggleDefault(i)}
+              className="border-[var(--border-default)] data-[state=checked]:bg-[var(--accent-indigo)] data-[state=checked]:border-[var(--accent-indigo)]"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
             type="button"
             onClick={() => remove(i)}
+            className="h-[30px] w-8 rounded-md hover:border-red-500 hover:text-red-500 hover:bg-red-500/10"
             style={{
-              width: 32,
-              height: 30,
-              borderRadius: 5,
               border: '1px solid var(--border-default)',
               background: 'var(--bg-input)',
               color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
               transition: 'all 150ms',
             }}
-            onMouseEnter={e => {
-              const el = e.currentTarget
-              el.style.borderColor = '#EF4444'
-              el.style.color = '#EF4444'
-              el.style.background = 'rgba(239,68,68,0.08)'
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget
-              el.style.borderColor = 'var(--border-default)'
-              el.style.color = 'var(--text-muted)'
-              el.style.background = 'var(--bg-input)'
-            }}
           >
-            ×
-          </button>
+            <X className="h-3 w-3" />
+          </Button>
         </div>
       ))}
       <button className="add-btn" onClick={add} type="button" style={{ marginTop: 2 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <line x1="12" y1="5" x2="12" y2="19"/>
-          <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+        <Plus className="h-3 w-3" />
         Add Rating Source
       </button>
     </div>

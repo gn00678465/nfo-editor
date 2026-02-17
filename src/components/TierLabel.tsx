@@ -1,3 +1,10 @@
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from './ui/tooltip'
+
 type Tier = 1 | 2 | 3 | 4
 
 const TIER_COLORS: Record<Tier, string> = {
@@ -42,25 +49,42 @@ export default function TierLabel({ label, tier, hint, cdataActive }: TierLabelP
         }}
       >
         {tier && (
-          <span
-            title={TIER_LABELS[tier]}
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              background: TIER_COLORS[tier],
-              flexShrink: 0,
-              display: 'inline-block',
-            }}
-          />
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: TIER_COLORS[tier],
+                    flexShrink: 0,
+                    display: 'inline-block',
+                    cursor: 'help',
+                  }}
+                />
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                className="font-ui text-xs"
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-default)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                {TIER_LABELS[tier]}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
         {label}
         {hint && (
           <span
+            className="font-mono"
             style={{
               fontSize: 9,
               color: 'var(--text-muted)',
-              fontFamily: "'DM Mono', monospace",
             }}
           >
             {hint}
@@ -68,7 +92,7 @@ export default function TierLabel({ label, tier, hint, cdataActive }: TierLabelP
         )}
       </div>
       {cdataActive && (
-        <span className="cdata-pill">CDATA ✓</span>
+        <span className="cdata-pill">CDATA &#10003;</span>
       )}
     </div>
   )

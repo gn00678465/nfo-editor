@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import TierLabel from './TierLabel'
+import { X, ImageIcon } from 'lucide-react'
 
 type Tier = 1 | 2 | 3 | 4
 
@@ -27,29 +28,23 @@ export default function ImageField({ label, tier, hint, value, onChange, aspectR
             type="url"
             value={value}
             onChange={e => { onChange(e.target.value); setImgError(false) }}
-            placeholder="https://…"
+            placeholder="https://..."
           />
           {value && (
             <button
               type="button"
               onClick={() => onChange('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 transition-opacity"
               style={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
                 background: 'none',
                 border: 'none',
                 color: 'var(--text-muted)',
                 cursor: 'pointer',
-                fontSize: 14,
-                lineHeight: 1,
                 padding: 0,
+                lineHeight: 1,
               }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#EF4444')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
             >
-              ×
+              <X className="h-3.5 w-3.5 hover:text-red-500" />
             </button>
           )}
         </div>
@@ -74,18 +69,15 @@ export default function ImageField({ label, tier, hint, value, onChange, aspectR
               onError={() => setImgError(true)}
             />
           ) : (
-            <span
-              style={{
-                fontSize: 9,
-                color: 'var(--text-muted)',
-                fontFamily: "'DM Mono', monospace",
-                textAlign: 'center',
-                padding: 4,
-                lineHeight: 1.4,
-              }}
-            >
-              {label.toUpperCase()}<br/>PREVIEW
-            </span>
+            <div className="flex flex-col items-center gap-0.5" style={{ color: 'var(--text-muted)' }}>
+              <ImageIcon className="h-4 w-4 opacity-40" />
+              <span
+                className="font-mono"
+                style={{ fontSize: 8, textAlign: 'center', lineHeight: 1.3 }}
+              >
+                {label.toUpperCase()}
+              </span>
+            </div>
           )}
         </div>
       </div>

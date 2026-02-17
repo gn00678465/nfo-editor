@@ -1,3 +1,5 @@
+import { ChevronDown } from 'lucide-react'
+
 interface SectionProps {
   num: number
   title: string
@@ -29,11 +31,11 @@ export default function Section({ num, title, icon, meta, collapsed, onToggle, c
         }}
       >
         <div
+          className="font-title"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            fontFamily: "'Syne', sans-serif",
             fontSize: 10,
             fontWeight: 600,
             letterSpacing: '0.16em',
@@ -50,19 +52,20 @@ export default function Section({ num, title, icon, meta, collapsed, onToggle, c
           {title}
         </div>
         <div
+          className="font-mono"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            fontFamily: "'DM Mono', monospace",
             fontSize: 10,
             color: 'var(--text-muted)',
           }}
         >
           {meta && <span>{meta}</span>}
-          <span style={{ fontSize: 11, transition: 'transform 150ms', transform: collapsed ? 'rotate(-90deg)' : 'none' }}>
-            ▾
-          </span>
+          <ChevronDown
+            className="h-3.5 w-3.5 transition-transform duration-150"
+            style={{ transform: collapsed ? 'rotate(-90deg)' : 'none' }}
+          />
         </div>
       </div>
 

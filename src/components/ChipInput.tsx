@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import { X } from 'lucide-react'
 
 interface ChipInputProps {
   values: string[]
@@ -10,7 +11,7 @@ interface ChipInputProps {
 export default function ChipInput({
   values,
   onChange,
-  placeholder = 'Add…',
+  placeholder = 'Add...',
   chipClass = 'chip-tag',
 }: ChipInputProps) {
   const [inputValue, setInputValue] = useState('')
@@ -60,22 +61,18 @@ export default function ChipInput({
           {v}
           <button
             onClick={e => { e.stopPropagation(); removeValue(i) }}
+            className="inline-flex items-center justify-center opacity-60 hover:opacity-100 transition-opacity"
             style={{
-              fontSize: 11,
-              lineHeight: 1,
-              opacity: 0.6,
-              cursor: 'pointer',
-              fontWeight: 400,
               background: 'none',
               border: 'none',
               padding: 0,
               color: 'inherit',
+              cursor: 'pointer',
+              lineHeight: 1,
             }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-            onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
             type="button"
           >
-            ×
+            <X className="h-2.5 w-2.5" />
           </button>
         </span>
       ))}

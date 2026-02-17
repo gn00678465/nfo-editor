@@ -1,5 +1,7 @@
 import { useCallback } from 'react'
 import type { Actor } from '../lib/nfoParser'
+import { Button } from './ui/button'
+import { Plus, X, User } from 'lucide-react'
 
 interface ActorsFieldProps {
   actors: Actor[]
@@ -58,39 +60,16 @@ export default function ActorsField({ actors, onChange }: ActorsFieldProps) {
           }}
         >
           {/* Delete button */}
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => remove(i)}
             type="button"
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              width: 20,
-              height: 20,
-              borderRadius: 4,
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14,
-              transition: 'background 150ms, color 150ms',
-            }}
-            onMouseEnter={e => {
-              const el = e.currentTarget
-              el.style.background = 'rgba(239,68,68,0.15)'
-              el.style.color = '#EF4444'
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget
-              el.style.background = 'transparent'
-              el.style.color = 'var(--text-muted)'
-            }}
+            className="absolute top-2 right-2 h-5 w-5 rounded hover:bg-red-500/15 hover:text-red-500"
+            style={{ color: 'var(--text-muted)' }}
           >
-            ×
-          </button>
+            <X className="h-3 w-3" />
+          </Button>
 
           {/* Thumb */}
           <div
@@ -98,7 +77,7 @@ export default function ActorsField({ actors, onChange }: ActorsFieldProps) {
               width: 56,
               height: 56,
               borderRadius: 6,
-              background: '#1A1D28',
+              background: 'var(--bg-surface)',
               border: '1px solid var(--border-default)',
               display: 'flex',
               alignItems: 'center',
@@ -115,10 +94,7 @@ export default function ActorsField({ actors, onChange }: ActorsFieldProps) {
                 onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4E5268" strokeWidth="1.5">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-              </svg>
+              <User className="h-5 w-5" style={{ color: 'var(--text-muted)' }} />
             )}
           </div>
 
@@ -141,7 +117,7 @@ export default function ActorsField({ actors, onChange }: ActorsFieldProps) {
                 type="text"
                 value={actor.role ?? ''}
                 onChange={e => update(i, 'role', e.target.value)}
-                placeholder="Character/role…"
+                placeholder="Character/role..."
               />
             </div>
             <div>
@@ -157,14 +133,8 @@ export default function ActorsField({ actors, onChange }: ActorsFieldProps) {
             <div>
               <label style={labelSm}>Type</label>
               <select
-                style={{
-                  ...inputSm,
-                  appearance: 'none',
-                  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234E5268' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 8px center',
-                  paddingRight: 28,
-                }}
+                className="field-select"
+                style={{ ...inputSm, appearance: 'none', paddingRight: 28 }}
                 value={actor.type ?? 'Actor'}
                 onChange={e => update(i, 'type', e.target.value)}
               >
@@ -180,7 +150,7 @@ export default function ActorsField({ actors, onChange }: ActorsFieldProps) {
                 type="url"
                 value={actor.thumb ?? ''}
                 onChange={e => update(i, 'thumb', e.target.value)}
-                placeholder="https://…"
+                placeholder="https://..."
               />
             </div>
           </div>
@@ -188,10 +158,7 @@ export default function ActorsField({ actors, onChange }: ActorsFieldProps) {
       ))}
 
       <button className="add-btn" onClick={add} type="button">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <line x1="12" y1="5" x2="12" y2="19"/>
-          <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+        <Plus className="h-3 w-3" />
         Add Actor
       </button>
     </div>

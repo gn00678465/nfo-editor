@@ -1,4 +1,9 @@
 import type { NfoFile } from '../App'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { ScrollArea } from './ui/scroll-area'
+import { Separator } from './ui/separator'
+import { FolderOpen, Search } from 'lucide-react'
 
 interface FileListProps {
   files: NfoFile[]
@@ -36,57 +41,46 @@ export default function FileList({
       }}
     >
       {/* Header controls */}
-      <div
-        style={{
-          padding: 12,
-          borderBottom: '1px solid var(--border-subtle)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-        }}
-      >
-        <button
+      <div className="p-3 flex flex-col gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+        <Button
+          variant="outline"
           onClick={onOpenFolder}
-          className="folder-btn no-drag"
+          className="no-drag w-full justify-center gap-2 font-ui"
+          style={{
+            background: 'transparent',
+            border: '1px dashed var(--accent-amber)',
+            color: 'var(--accent-amber)',
+            borderRadius: 5,
+            fontSize: 12,
+            fontWeight: 500,
+            height: 34,
+            padding: '0 12px',
+          }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-          {allFiles.length > 0 ? 'Change Folder…' : 'Select Folder…'}
-        </button>
+          <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+          <span className="leading-none">{allFiles.length > 0 ? 'Change Folder...' : 'Select Folder...'}</span>
+        </Button>
 
         {/* Search */}
-        <div style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: 9,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--text-muted)',
-              pointerEvents: 'none',
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <circle cx="11" cy="11" r="8"/>
-              <path d="m21 21-4.35-4.35"/>
-            </svg>
-          </span>
-          <input
+        <div className="relative">
+          <Search
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none"
+            style={{ color: 'var(--text-muted)' }}
+          />
+          <Input
             type="text"
             value={filterText}
             onChange={e => onFilterChange(e.target.value)}
-            placeholder="Filter files… ⌘F"
+            placeholder="Filter files... &#8984;F"
+            className="pl-8 font-ui"
             style={{
-              width: '100%',
               background: 'var(--bg-input)',
               border: '1px solid var(--border-default)',
               borderRadius: 5,
               padding: '6px 10px 6px 30px',
-              fontFamily: "'DM Sans', sans-serif",
               fontSize: 12,
               color: 'var(--text-primary)',
-              outline: 'none',
+              height: 32,
             }}
           />
         </div>
@@ -95,11 +89,11 @@ export default function FileList({
       {/* File count */}
       {allFiles.length > 0 && (
         <div
+          className="font-mono"
           style={{
             padding: '6px 12px',
             fontSize: 11,
             color: 'var(--text-muted)',
-            fontFamily: "'DM Mono', monospace",
             borderBottom: '1px solid var(--border-subtle)',
           }}
         >
@@ -115,7 +109,7 @@ export default function FileList({
       )}
 
       {/* File list */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <ScrollArea className="flex-1">
         {files.length === 0 && allFiles.length === 0 && (
           <div
             style={{
@@ -182,11 +176,11 @@ export default function FileList({
                 />
               )}
               <div
+                className="font-mono"
                 style={{
                   fontSize: 13,
                   fontWeight: 500,
-                  color: isSelected ? '#FDE68A' : 'var(--text-primary)',
-                  fontFamily: "'DM Mono', monospace",
+                  color: isSelected ? 'var(--accent-amber)' : 'var(--text-primary)',
                   letterSpacing: '0.02em',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -196,11 +190,11 @@ export default function FileList({
                 {file.folderName}
               </div>
               <div
+                className="font-ui"
                 style={{
                   fontSize: 11,
                   color: 'var(--text-muted)',
                   marginTop: 2,
-                  fontFamily: "'DM Sans', sans-serif",
                 }}
               >
                 {file.fileName}
@@ -208,7 +202,7 @@ export default function FileList({
             </button>
           )
         })}
-      </div>
+      </ScrollArea>
     </div>
   )
 }

@@ -1,5 +1,7 @@
 import { useCallback } from 'react'
 import type { UniqueId } from '../lib/nfoParser'
+import { Button } from './ui/button'
+import { Plus, X, Star } from 'lucide-react'
 
 interface UniqueIdFieldProps {
   ids: UniqueId[]
@@ -22,10 +24,6 @@ export default function UniqueIdField({ ids, onChange }: UniqueIdFieldProps) {
     (index: number, field: keyof UniqueId, value: string | boolean) => {
       onChange(ids.map((u, i) => {
         if (i !== index) return u
-        if (field === 'default' && value === true) {
-          // Only one can be default
-          return { ...u, [field]: value }
-        }
         return { ...u, [field]: value }
       }))
     },
@@ -63,9 +61,6 @@ export default function UniqueIdField({ ids, onChange }: UniqueIdFieldProps) {
     color: 'var(--text-primary)',
     outline: 'none',
     appearance: 'none',
-    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234E5268' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'right 8px center',
     cursor: 'pointer',
   }
 
@@ -82,6 +77,7 @@ export default function UniqueIdField({ ids, onChange }: UniqueIdFieldProps) {
           }}
         >
           <select
+            className="field-select"
             style={selectStyle}
             value={uid.type}
             onChange={e => update(i, 'type', e.target.value)}
@@ -93,68 +89,43 @@ export default function UniqueIdField({ ids, onChange }: UniqueIdFieldProps) {
             type="text"
             value={uid.value}
             onChange={e => update(i, 'value', e.target.value)}
-            placeholder="ID value…"
+            placeholder="ID value..."
           />
-          <button
+          <Button
+            variant="outline"
+            size="icon"
             type="button"
             onClick={() => setDefault(i)}
             title="Set as default"
+            className="h-[30px] w-9 rounded-md"
             style={{
-              width: 36,
-              height: 30,
-              borderRadius: 5,
               border: `1px solid ${uid.default ? 'var(--accent-amber)' : 'var(--border-default)'}`,
               background: uid.default ? 'rgba(245,158,11,0.1)' : 'var(--bg-input)',
               color: uid.default ? 'var(--accent-amber)' : 'var(--text-muted)',
-              fontSize: 14,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
               transition: 'all 150ms',
             }}
           >
-            ★
-          </button>
-          <button
+            <Star className="h-3.5 w-3.5" fill={uid.default ? 'currentColor' : 'none'} />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
             type="button"
             onClick={() => remove(i)}
+            className="h-[30px] w-8 rounded-md hover:border-red-500 hover:text-red-500 hover:bg-red-500/10"
             style={{
-              width: 32,
-              height: 30,
-              borderRadius: 5,
               border: '1px solid var(--border-default)',
               background: 'var(--bg-input)',
               color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
               transition: 'all 150ms',
             }}
-            onMouseEnter={e => {
-              const el = e.currentTarget
-              el.style.borderColor = '#EF4444'
-              el.style.color = '#EF4444'
-              el.style.background = 'rgba(239,68,68,0.08)'
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget
-              el.style.borderColor = 'var(--border-default)'
-              el.style.color = 'var(--text-muted)'
-              el.style.background = 'var(--bg-input)'
-            }}
           >
-            ×
-          </button>
+            <X className="h-3 w-3" />
+          </Button>
         </div>
       ))}
       <button className="add-btn" onClick={add} type="button" style={{ marginTop: 2 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <line x1="12" y1="5" x2="12" y2="19"/>
-          <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+        <Plus className="h-3 w-3" />
         Add Unique ID
       </button>
     </div>
