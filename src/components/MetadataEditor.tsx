@@ -93,7 +93,7 @@ export default function MetadataEditor({ data, onChange }: MetadataEditorProps) 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <Field label="Runtime" tier={1}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <input className={monoCls} type="number" value={str('runtime')} onChange={e => set('runtime', e.target.value)} style={{ borderRadius: '5px 0 0 5px' }} />
+              <input className={monoCls} type="text" value={str('runtime')} onChange={e => set('runtime', e.target.value)} placeholder="69 or 01:09:09" style={{ borderRadius: '5px 0 0 5px' }} />
               <span className="input-suffix">min</span>
             </div>
           </Field>
@@ -131,13 +131,13 @@ export default function MetadataEditor({ data, onChange }: MetadataEditorProps) 
         collapsed={!!collapsed['s2']}
         onToggle={() => toggleSection('s2')}
       >
-        <Field label="Plot" tier={1} cdataActive>
+        <Field label="Plot" tier={1} cdataActive={!!str('plot')}>
           <textarea className={textaCls} rows={5} value={str('plot')} onChange={e => set('plot', e.target.value)} placeholder="Movie plot..." />
         </Field>
-        <Field label="Outline" tier={3} cdataActive>
+        <Field label="Outline" tier={3} cdataActive={!!str('outline')}>
           <textarea className={textaCls} rows={3} value={str('outline')} onChange={e => set('outline', e.target.value)} placeholder="Brief outline..." />
         </Field>
-        <Field label="Original Plot" tier={4} hint="<originalplot>" cdataActive>
+        <Field label="Original Plot" tier={4} hint="<originalplot>" cdataActive={!!str('originalplot')}>
           <textarea className={textaCls} rows={3} value={str('originalplot')} onChange={e => set('originalplot', e.target.value)} placeholder="Original language plot..." />
         </Field>
       </Section>
@@ -149,15 +149,15 @@ export default function MetadataEditor({ data, onChange }: MetadataEditorProps) 
         num={3}
         title="Classification"
         icon={<Tag className="h-4 w-4" />}
-        meta={`genres: ${data.genres.length} \u00b7 tags: ${data.tags.length}`}
+        meta={`genres: ${data.genres.length} · tags: ${data.tags.length}`}
         collapsed={!!collapsed['s3']}
         onToggle={() => toggleSection('s3')}
       >
-        <Field label="Genres" tier={1} hint="\u2192 multiple <genre> elements">
-          <ChipInput values={data.genres} onChange={v => set('genres', v)} placeholder="Add genre..." chipClass="chip-genre" />
+        <Field label="Genres" tier={1} hint="→ multiple <genre> elements">
+          <ChipInput values={data.genres} onChange={v => set('genres', v)} placeholder="Add genre..." chipClass="chip-genre" enableTextMode />
         </Field>
-        <Field label="Tags" tier={2} hint="\u2192 multiple <tag> elements">
-          <ChipInput values={data.tags} onChange={v => set('tags', v)} placeholder="Add tag..." chipClass="chip-tag" />
+        <Field label="Tags" tier={2} hint="→ multiple <tag> elements">
+          <ChipInput values={data.tags} onChange={v => set('tags', v)} placeholder="Add tag..." chipClass="chip-tag" enableTextMode />
         </Field>
         <Field label="Countries" tier={3}>
           <ChipInput values={data.countries} onChange={v => set('countries', v)} placeholder="Add country..." chipClass="chip-country" />
