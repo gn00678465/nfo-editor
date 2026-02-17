@@ -5,7 +5,7 @@ import MetadataEditor from './components/MetadataEditor'
 import ThemeToggle from './components/ThemeToggle'
 import { Button } from './components/ui/button'
 import { Separator } from './components/ui/separator'
-import { Save } from 'lucide-react'
+import { Save, Undo2 } from 'lucide-react'
 
 export interface NfoFile {
   filePath: string
@@ -55,6 +55,7 @@ export default function App() {
   const [filterText, setFilterText] = useState('')
   const [selectedFile, setSelectedFile] = useState<NfoFile | null>(null)
   const [currentData, setCurrentData] = useState<NfoData | null>(null)
+  const [originalData, setOriginalData] = useState<NfoData | null>(null)
   const [isDirty, setIsDirty] = useState(false)
   // Track which files have unsaved changes by path
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
@@ -133,16 +134,21 @@ export default function App() {
     }
 
     if (!content) {
-      setCurrentData(emptyNfoData())
+      const empty = emptyNfoData()
+      setCurrentData(empty)
+      setOriginalData(empty)
       setIsDirty(false)
       return
     }
     try {
       const data = parseNfo(content)
       setCurrentData(data)
+      setOriginalData(data)
       setIsDirty(dirtyFiles.has(file.filePath))
     } catch {
-      setCurrentData(emptyNfoData())
+      const empty = emptyNfoData()
+      setCurrentData(empty)
+      setOriginalData(empty)
       setIsDirty(false)
     }
   }, [dirtyFiles])
@@ -178,6 +184,7 @@ export default function App() {
 
       if (success) {
         setIsDirty(false)
+        setOriginalData(currentData)
         setSaveStatus('saved')
         setDirtyFiles(prev => {
           const next = new Set(prev)
@@ -194,6 +201,18 @@ export default function App() {
       setIsSaving(false)
     }
   }, [selectedFile, currentData, isSaving])
+
+  const handleDiscard = useCallback(() => {
+    if (!originalData || !selectedFile) return
+    setCurrentData(originalData)
+    setIsDirty(false)
+    setSaveStatus('idle')
+    setDirtyFiles(prev => {
+      const next = new Set(prev)
+      next.delete(selectedFile.filePath)
+      return next
+    })
+  }, [originalData, selectedFile])
 
   // Cmd+S / Ctrl+S shortcut
   useEffect(() => {
@@ -271,6 +290,28 @@ export default function App() {
                   style={{ width: 8, height: 8, background: 'var(--accent-amber)' }}
                   title="Unsaved changes"
                 />
+              )}
+              {isDirty && (
+                <Button
+                  onClick={handleDiscard}
+                  className="no-drag font-title gap-1.5"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--text-muted)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 5,
+                    padding: '7px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    height: 'auto',
+                  }}
+                >
+                  <Undo2 className="h-3 w-3" />
+                  Discard
+                </Button>
               )}
               <Button
                 onClick={handleSave}
