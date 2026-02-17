@@ -54,17 +54,24 @@ ipcMain.handle('dialog:openFolder', async () => {
 
 // IPC: Scan folder for NFO files recursively
 ipcMain.handle('fs:scanNfoFiles', async (_event, folderPath: string) => {
+  const SKIP_DIRS = new Set([
+    'node_modules', '.git', '.svn', '.hg', '__pycache__',
+    '.cache', '.vscode', '.idea', 'dist', 'dist-electron',
+    '.next', '.nuxt', 'build', '.DS_Store', 'vendor',
+  ])
+
   const nfoFiles: string[] = []
 
-  function scanDir(dir: string) {
+  async function scanDir(dir: string) {
     try {
-      const entries = fs.readdirSync(dir, { withFileTypes: true })
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true })
       for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name)
         if (entry.isDirectory()) {
-          scanDir(fullPath)
+          if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+            await scanDir(path.join(dir, entry.name))
+          }
         } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.nfo')) {
-          nfoFiles.push(fullPath)
+          nfoFiles.push(path.join(dir, entry.name))
         }
       }
     } catch {
@@ -72,7 +79,7 @@ ipcMain.handle('fs:scanNfoFiles', async (_event, folderPath: string) => {
     }
   }
 
-  scanDir(folderPath)
+  await scanDir(folderPath)
   return nfoFiles
 })
 

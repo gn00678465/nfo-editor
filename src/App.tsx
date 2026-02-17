@@ -27,6 +27,12 @@ const isElectron = !!window.electronAPI
 // Browser fallback: store FileSystemFileHandle per path for read/write
 type FileHandleMap = Map<string, FileSystemFileHandle>
 
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', '.svn', '.hg', '__pycache__',
+  '.cache', '.vscode', '.idea', 'dist', 'dist-electron',
+  '.next', '.nuxt', 'build', 'vendor',
+])
+
 async function scanNfoFilesFromDir(
   dirHandle: FileSystemDirectoryHandle,
   handles: FileHandleMap,
@@ -37,7 +43,9 @@ async function scanNfoFilesFromDir(
     if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.nfo')) {
       handles.set(entryPath, entry as FileSystemFileHandle)
     } else if (entry.kind === 'directory') {
-      await scanNfoFilesFromDir(entry as FileSystemDirectoryHandle, handles, entryPath)
+      if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+        await scanNfoFilesFromDir(entry as FileSystemDirectoryHandle, handles, entryPath)
+      }
     }
   }
 }

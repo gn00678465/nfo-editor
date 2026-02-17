@@ -1,7 +1,7 @@
-import { contextBridge, ipcRenderer } from "electron";
-contextBridge.exposeInMainWorld("electronAPI", {
-  openFolder: () => ipcRenderer.invoke("dialog:openFolder"),
-  scanNfoFiles: (folderPath) => ipcRenderer.invoke("fs:scanNfoFiles", folderPath),
-  readFile: (filePath) => ipcRenderer.invoke("fs:readFile", filePath),
-  writeFile: (filePath, content) => ipcRenderer.invoke("fs:writeFile", filePath, content)
+import { contextBridge as n, ipcRenderer as i } from "electron";
+n.exposeInMainWorld("electronAPI", {
+  openFolder: () => i.invoke("dialog:openFolder"),
+  scanNfoFiles: (e) => i.invoke("fs:scanNfoFiles", e),
+  readFile: (e) => i.invoke("fs:readFile", e),
+  writeFile: (e, o) => i.invoke("fs:writeFile", e, o)
 });
