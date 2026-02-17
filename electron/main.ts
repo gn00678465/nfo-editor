@@ -14,6 +14,11 @@ function createWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 600,
+    icon: process.platform === 'darwin'
+      ? path.join(__dirname, '../build/icon.icns')
+      : process.platform === 'win32'
+        ? path.join(__dirname, '../build/icon.ico')
+        : path.join(__dirname, '../build/256x256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -57,7 +62,7 @@ ipcMain.handle('fs:scanNfoFiles', async (_event, folderPath: string) => {
   const SKIP_DIRS = new Set([
     'node_modules', '.git', '.svn', '.hg', '__pycache__',
     '.cache', '.vscode', '.idea', 'dist', 'dist-electron',
-    '.next', '.nuxt', 'build', '.DS_Store', 'vendor',
+    '.next', '.nuxt', '.DS_Store', 'vendor', 'release',
   ])
 
   const nfoFiles: string[] = []
