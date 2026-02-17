@@ -2,6 +2,10 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { parseNfo, serializeNfo, emptyNfoData, type NfoData } from './lib/nfoParser'
 import FileList from './components/FileList'
 import MetadataEditor from './components/MetadataEditor'
+import ThemeToggle from './components/ThemeToggle'
+import { Button } from './components/ui/button'
+import { Separator } from './components/ui/separator'
+import { Save } from 'lucide-react'
 
 export interface NfoFile {
   filePath: string
@@ -183,7 +187,7 @@ export default function App() {
     }
   }, [selectedFile, currentData, isSaving])
 
-  // ⌘S / Ctrl+S shortcut
+  // Cmd+S / Ctrl+S shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -202,19 +206,22 @@ export default function App() {
       )
     : nfoFiles
 
+  const saveActive = isDirty && !!selectedFile
+
   return (
-    <div className="flex flex-col h-screen bg-base overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       {/* Titlebar */}
       <div
         className="titlebar-drag flex items-center justify-between px-4 shrink-0"
         style={{ height: 32, background: 'var(--bg-base)', borderBottom: '1px solid var(--border-subtle)' }}
       >
         <span
-          className="no-drag font-title text-text-muted select-none"
-          style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}
+          className="no-drag font-title select-none"
+          style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}
         >
           NFO METADATA EDITOR
         </span>
+        <ThemeToggle />
       </div>
 
       {/* Main layout */}
@@ -244,8 +251,8 @@ export default function App() {
             }}
           >
             <span
-              className="font-mono text-text-muted truncate"
-              style={{ fontSize: 11 }}
+              className="font-mono truncate"
+              style={{ fontSize: 11, color: 'var(--text-muted)' }}
             >
               {selectedFile ? selectedFile.filePath : 'No file selected'}
             </span>
@@ -257,39 +264,34 @@ export default function App() {
                   title="Unsaved changes"
                 />
               )}
-              <button
+              <Button
                 onClick={handleSave}
-                disabled={!isDirty || !selectedFile || isSaving}
+                disabled={!saveActive || isSaving}
+                className="no-drag font-title gap-1.5"
                 style={{
-                  background: isDirty && selectedFile
-                    ? saveStatus === 'saved' ? '#10B981' : 'var(--accent-amber)'
+                  background: saveActive
+                    ? saveStatus === 'saved' ? 'var(--accent-green)' : 'var(--accent-amber)'
                     : 'var(--bg-elevated)',
-                  color: isDirty && selectedFile ? '#1A1000' : 'var(--text-muted)',
+                  color: saveActive ? '#1A1000' : 'var(--text-muted)',
                   border: 'none',
                   borderRadius: 5,
                   padding: '7px 16px',
-                  fontFamily: "'Syne', sans-serif",
                   fontSize: 12,
                   fontWeight: 700,
                   letterSpacing: '0.08em',
                   textTransform: 'uppercase',
-                  cursor: isDirty && selectedFile ? 'pointer' : 'not-allowed',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'background 150ms',
+                  cursor: saveActive ? 'pointer' : 'not-allowed',
+                  height: 'auto',
                 }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                  <polyline points="17 21 17 13 7 13 7 21"/>
-                  <polyline points="7 3 7 8 15 8"/>
-                </svg>
-                {isSaving ? 'Saving…' : saveStatus === 'saved' ? 'Saved ✓' : 'Save'}
-                <span style={{ fontSize: 10, opacity: 0.6, fontFamily: "'DM Mono', monospace" }}>⌘S</span>
-              </button>
+                <Save className="h-3 w-3" />
+                {isSaving ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save'}
+                <span className="font-mono text-[10px] opacity-60">&#8984;S</span>
+              </Button>
             </div>
           </div>
+
+          <Separator />
 
           {/* Editor content */}
           <div className="flex-1 overflow-hidden">
