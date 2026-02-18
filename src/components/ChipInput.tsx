@@ -48,6 +48,14 @@ export default function ChipInput({
     [values, onChange]
   )
 
+  const addValues = useCallback(
+    (vals: string[]) => {
+      const newVals = [...new Set(vals.map(v => v.trim()).filter(v => v !== '' && !values.includes(v)))]
+      if (newVals.length > 0) onChange([...values, ...newVals])
+    },
+    [values, onChange]
+  )
+
   const removeValue = useCallback(
     (index: number) => {
       onChange(values.filter((_, i) => i !== index))
@@ -56,9 +64,17 @@ export default function ChipInput({
   )
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
+    if (e.key === 'Enter') {
       e.preventDefault()
-      addValue(inputValue.replace(/,$/, ''))
+      if (inputValue.includes(',')) {
+        addValues(inputValue.split(',').map(s => s.trim()).filter(s => s !== ''))
+      } else {
+        addValue(inputValue)
+      }
+      setInputValue('')
+    } else if (e.key === ',') {
+      e.preventDefault()
+      addValue(inputValue)
       setInputValue('')
     } else if (e.key === 'Backspace' && !inputValue && values.length > 0) {
       removeValue(values.length - 1)
@@ -67,7 +83,11 @@ export default function ChipInput({
 
   const handleBlur = () => {
     if (inputValue.trim()) {
-      addValue(inputValue)
+      if (inputValue.includes(',')) {
+        addValues(inputValue.split(',').map(s => s.trim()).filter(s => s !== ''))
+      } else {
+        addValue(inputValue)
+      }
       setInputValue('')
     }
   }
