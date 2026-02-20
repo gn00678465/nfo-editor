@@ -1,15 +1,16 @@
 {
   "name": "nfo-editor",
   "version": "1.0.0",
+  "author": "gn00678465",
   "description": "NFO Metadata Editor",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "dist:mac": "vite build && electron-builder --mac",
-    "dist:win": "vite build && electron-builder --win",
-    "dist:linux": "vite build && electron-builder --linux",
+    "electron:mac": "vite build && electron-builder --mac",
+    "electron:win": "vite build && electron-builder --win",
+    "electron:linux": "vite build && electron-builder --linux",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
