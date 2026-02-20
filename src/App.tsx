@@ -228,8 +228,7 @@ export default function App() {
 
   const filteredFiles = filterText.trim()
     ? nfoFiles.filter(f =>
-        f.folderName.toLowerCase().includes(filterText.toLowerCase()) ||
-        f.fileName.toLowerCase().includes(filterText.toLowerCase())
+        f.filePath.toLowerCase().includes(filterText.toLowerCase())
       )
     : nfoFiles
 

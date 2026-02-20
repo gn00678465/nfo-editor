@@ -1,6 +1,6 @@
 {
   "name": "nfo-editor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "gn00678465",
   "description": "NFO Metadata Editor",
   "type": "module",
@@ -30,7 +30,10 @@
       "icon": "build/icon.icns"
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.ico"
     },
     "linux": {

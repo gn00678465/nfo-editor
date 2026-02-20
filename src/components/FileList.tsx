@@ -195,9 +195,13 @@ export default function FileList({
                   fontSize: 11,
                   color: 'var(--text-muted)',
                   marginTop: 2,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
+                title={file.filePath}
               >
-                {file.fileName}
+                {file.filePath}
               </div>
             </button>
           )
