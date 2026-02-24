@@ -15,6 +15,7 @@ interface FileListProps {
   onSelectFile: (f: NfoFile) => void
   onOpenFolder: () => void
   folderPath: string
+  appVersion?: string
 }
 
 export default function FileList({
@@ -27,6 +28,7 @@ export default function FileList({
   onSelectFile,
   onOpenFolder,
   folderPath,
+  appVersion,
 }: FileListProps) {
   return (
     <div
@@ -207,6 +209,23 @@ export default function FileList({
           )
         })}
       </ScrollArea>
+
+      {/* Version footer */}
+      {appVersion && (
+        <div
+          className="font-mono"
+          style={{
+            padding: '6px 12px',
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            borderTop: '1px solid var(--border-subtle)',
+            opacity: 0.5,
+            userSelect: 'none',
+          }}
+        >
+          v{appVersion}
+        </div>
+      )}
     </div>
   )
 }

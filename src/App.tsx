@@ -62,6 +62,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [folderPath, setFolderPath] = useState<string>('')
+  const [appVersion, setAppVersion] = useState<string>('')
 
   // Browser-only: file handle map for File System Access API
   const fileHandles = useRef<FileHandleMap>(new Map())
@@ -216,6 +217,10 @@ export default function App() {
 
   // Cmd+S / Ctrl+S shortcut
   useEffect(() => {
+    window.electronAPI?.getAppVersion().then(v => setAppVersion(v))
+  }, [])
+
+  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
@@ -263,6 +268,7 @@ export default function App() {
           onSelectFile={handleSelectFile}
           onOpenFolder={handleOpenFolder}
           folderPath={folderPath}
+          appVersion={appVersion}
         />
 
         {/* RIGHT PANEL */}
