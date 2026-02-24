@@ -31,12 +31,12 @@ export default function ChipInput({
   const inputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Sync text value when switching to text mode or when values change in chip mode
+  // Sync text value when switching to text mode or when values change externally (e.g. file switch)
   useEffect(() => {
     if (mode === 'text') {
       setTextValue(values.join(', '))
     }
-  }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, values])
 
   const addValue = useCallback(
     (val: string) => {
@@ -99,8 +99,11 @@ export default function ChipInput({
       .filter(s => s !== '')
     // Deduplicate
     const unique = [...new Set(parsed)]
-    onChange(unique)
-  }, [textValue, onChange])
+    // Only call onChange if values actually changed to avoid false dirty state
+    if (unique.length !== values.length || unique.some((v, i) => v !== values[i])) {
+      onChange(unique)
+    }
+  }, [textValue, values, onChange])
 
   const switchToChip = useCallback(() => {
     handleTextCommit()
@@ -128,7 +131,7 @@ export default function ChipInput({
 
   // ── Toggle buttons ──
   const modeToggle = enableTextMode && (
-    <TooltipProvider delayDuration={300}>
+    <TooltipProvider delay={300}>
       <div
         className="inline-flex items-center rounded-md p-0.5 gap-0"
         style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)' }}
@@ -190,7 +193,7 @@ export default function ChipInput({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {modeToggle}
-            <TooltipProvider delayDuration={300}>
+            <TooltipProvider delay={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
