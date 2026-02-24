@@ -49,7 +49,7 @@ export default function TierLabel({ label, tier, hint, cdataActive }: TierLabelP
         }}
       >
         {tier && (
-          <TooltipProvider delayDuration={200}>
+          <TooltipProvider delay={200}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span
