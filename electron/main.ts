@@ -36,13 +36,18 @@ function createMenu() {
         {
           label: 'About NFO Metadata Editor',
           click: () => {
-            dialog.showMessageBox(mainWindow!, {
-              type: 'info',
+            const options = {
+              type: 'info' as const,
               title: 'About NFO Metadata Editor',
               message: 'NFO Metadata Editor',
               detail: `Version ${version}`,
-              buttons: ['OK'],
-            })
+              buttons: ['OK'] as const,
+            }
+            if (mainWindow) {
+              dialog.showMessageBox(mainWindow, options)
+            } else {
+              dialog.showMessageBox(options)
+            }
           },
         },
       ],
@@ -97,10 +102,14 @@ ipcMain.handle('app:getVersion', () => app.getVersion())
 
 // IPC: Select folder
 ipcMain.handle('dialog:openFolder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
-    properties: ['openDirectory'],
+  const options = {
+    properties: ['openDirectory'] as const,
     title: 'Select folder containing NFO files',
-  })
+  }
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options)
+
   if (result.canceled) return null
   return result.filePaths[0]
 })

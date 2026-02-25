@@ -24,6 +24,19 @@ function parentName(p: string): string {
 
 const isElectron = !!window.electronAPI
 
+declare global {
+  interface Window {
+    electronAPI?: {
+      openFolder: () => Promise<string | null>
+      scanNfoFiles: (folderPath: string) => Promise<string[]>
+      readFile: (filePath: string) => Promise<{ success: boolean; content?: string }>
+      writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>
+      getAppVersion: () => Promise<string>
+    }
+    showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>
+  }
+}
+
 // Browser fallback: store FileSystemFileHandle per path for read/write
 type FileHandleMap = Map<string, FileSystemFileHandle>
 
@@ -215,9 +228,16 @@ export default function App() {
     })
   }, [originalData, selectedFile])
 
-  // Cmd+S / Ctrl+S shortcut
+  // Fetch app version on mount
   useEffect(() => {
-    window.electronAPI?.getAppVersion().then(v => setAppVersion(v))
+    if (window.electronAPI?.getAppVersion) {
+      window.electronAPI
+        .getAppVersion()
+        .then(v => setAppVersion(v))
+        .catch(error => {
+          console.error('Failed to get app version', error)
+        })
+    }
   }, [])
 
   useEffect(() => {
