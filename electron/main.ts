@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
@@ -7,6 +7,55 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 let mainWindow: BrowserWindow | null = null
+
+function createMenu() {
+  const version = app.getVersion()
+  const isMac = process.platform === 'darwin'
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac ? [{ label: app.name, submenu: [
+      { role: 'about' as const },
+      { type: 'separator' as const },
+      { role: 'services' as const },
+      { type: 'separator' as const },
+      { role: 'hide' as const },
+      { role: 'hideOthers' as const },
+      { role: 'unhide' as const },
+      { type: 'separator' as const },
+      { role: 'quit' as const },
+    ]}] : []),
+    {
+      label: 'File',
+      submenu: [
+        isMac ? { role: 'close' as const } : { role: 'quit' as const },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'About NFO Metadata Editor',
+          click: () => {
+            const options = {
+              type: 'info' as const,
+              title: 'About NFO Metadata Editor',
+              message: 'NFO Metadata Editor',
+              detail: `Version ${version}`,
+              buttons: ['OK'] as const,
+            }
+            if (mainWindow) {
+              dialog.showMessageBox(mainWindow, options)
+            } else {
+              dialog.showMessageBox(options)
+            }
+          },
+        },
+      ],
+    },
+  ]
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -37,6 +86,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  createMenu()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -47,12 +97,19 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+// IPC: App version
+ipcMain.handle('app:getVersion', () => app.getVersion())
+
 // IPC: Select folder
 ipcMain.handle('dialog:openFolder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
-    properties: ['openDirectory'],
+  const options = {
+    properties: ['openDirectory'] as const,
     title: 'Select folder containing NFO files',
-  })
+  }
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options)
+
   if (result.canceled) return null
   return result.filePaths[0]
 })

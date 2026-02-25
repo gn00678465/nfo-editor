@@ -24,6 +24,19 @@ function parentName(p: string): string {
 
 const isElectron = !!window.electronAPI
 
+declare global {
+  interface Window {
+    electronAPI?: {
+      openFolder: () => Promise<string | null>
+      scanNfoFiles: (folderPath: string) => Promise<string[]>
+      readFile: (filePath: string) => Promise<{ success: boolean; content?: string }>
+      writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>
+      getAppVersion: () => Promise<string>
+    }
+    showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>
+  }
+}
+
 // Browser fallback: store FileSystemFileHandle per path for read/write
 type FileHandleMap = Map<string, FileSystemFileHandle>
 
@@ -62,6 +75,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [folderPath, setFolderPath] = useState<string>('')
+  const [appVersion, setAppVersion] = useState<string>('')
 
   // Browser-only: file handle map for File System Access API
   const fileHandles = useRef<FileHandleMap>(new Map())
@@ -214,7 +228,18 @@ export default function App() {
     })
   }, [originalData, selectedFile])
 
-  // Cmd+S / Ctrl+S shortcut
+  // Fetch app version on mount
+  useEffect(() => {
+    if (window.electronAPI?.getAppVersion) {
+      window.electronAPI
+        .getAppVersion()
+        .then(v => setAppVersion(v))
+        .catch(error => {
+          console.error('Failed to get app version', error)
+        })
+    }
+  }, [])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -263,6 +288,7 @@ export default function App() {
           onSelectFile={handleSelectFile}
           onOpenFolder={handleOpenFolder}
           folderPath={folderPath}
+          appVersion={appVersion}
         />
 
         {/* RIGHT PANEL */}
