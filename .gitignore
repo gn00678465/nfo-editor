@@ -23,6 +23,7 @@ SHASUMS256.txt
 compile_commands.json
 .envrc
 release/
+.worktrees/
 
 # npm package
 /npm/dist
