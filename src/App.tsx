@@ -72,7 +72,10 @@ export default function App() {
   const [isDirty, setIsDirty] = useState(false)
   // Track which files have unsaved changes by path
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
+  const [batchMode, setBatchMode] = useState(false)
+  const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
+  const [isBatchWriting] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [folderPath, setFolderPath] = useState<string>('')
   const [appVersion, setAppVersion] = useState<string>('')
@@ -85,47 +88,49 @@ export default function App() {
     if (isPickerOpen.current) return
     isPickerOpen.current = true
     try {
-    if (isElectron) {
-      const fp = await window.electronAPI!.openFolder()
-      if (!fp) return
-      setFolderPath(fp)
-      const files = await window.electronAPI!.scanNfoFiles(fp)
-      const list: NfoFile[] = files.map(f => ({
-        filePath: f,
-        folderName: parentName(f),
-        fileName: basename(f),
-      }))
-      setNfoFiles(list)
-    } else {
-      // Browser fallback using File System Access API
-      if (!('showDirectoryPicker' in window)) {
-        alert('Your browser does not support the File System Access API. Please use Chrome/Edge.')
-        return
-      }
-      try {
-        const dirHandle = await window.showDirectoryPicker!()
-        const handles: FileHandleMap = new Map()
-        await scanNfoFilesFromDir(dirHandle, handles, dirHandle.name)
-        fileHandles.current = handles
-        setFolderPath(dirHandle.name)
-        const list: NfoFile[] = Array.from(handles.keys()).map(fp => ({
-          filePath: fp,
-          folderName: parentName(fp),
-          fileName: basename(fp),
+      if (isElectron) {
+        const fp = await window.electronAPI!.openFolder()
+        if (!fp) return
+        setFolderPath(fp)
+        const files = await window.electronAPI!.scanNfoFiles(fp)
+        const list: NfoFile[] = files.map(f => ({
+          filePath: f,
+          folderName: parentName(f),
+          fileName: basename(f),
         }))
         setNfoFiles(list)
-      } catch (e: unknown) {
-        // User cancelled the picker or picker already active
-        if (e instanceof DOMException && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return
-        throw e
+      } else {
+        // Browser fallback using File System Access API
+        if (!('showDirectoryPicker' in window)) {
+          alert('Your browser does not support the File System Access API. Please use Chrome/Edge.')
+          return
+        }
+        try {
+          const dirHandle = await window.showDirectoryPicker!()
+          const handles: FileHandleMap = new Map()
+          await scanNfoFilesFromDir(dirHandle, handles, dirHandle.name)
+          fileHandles.current = handles
+          setFolderPath(dirHandle.name)
+          const list: NfoFile[] = Array.from(handles.keys()).map(fp => ({
+            filePath: fp,
+            folderName: parentName(fp),
+            fileName: basename(fp),
+          }))
+          setNfoFiles(list)
+        } catch (e: unknown) {
+          // User cancelled the picker or picker already active
+          if (e instanceof DOMException && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return
+          throw e
+        }
       }
-    }
-    setSelectedFile(null)
-    setCurrentData(null)
-    setIsDirty(false)
-    setDirtyFiles(new Set())
-    setFilterText('')
-    setSaveStatus('idle')
+      setSelectedFile(null)
+      setCurrentData(null)
+      setIsDirty(false)
+      setDirtyFiles(new Set())
+      setBatchMode(false)
+      setBatchSelectedFiles(new Set())
+      setFilterText('')
+      setSaveStatus('idle')
     } finally {
       isPickerOpen.current = false
     }
@@ -257,6 +262,31 @@ export default function App() {
       )
     : nfoFiles
 
+  const handleBatchToggle = useCallback(() => {
+    setBatchMode(prev => {
+      const next = !prev
+      if (!next) setBatchSelectedFiles(new Set())
+      return next
+    })
+  }, [])
+
+  const handleBatchSelectFile = useCallback((filePath: string, selected: boolean) => {
+    setBatchSelectedFiles(prev => {
+      const next = new Set(prev)
+      if (selected) next.add(filePath)
+      else next.delete(filePath)
+      return next
+    })
+  }, [])
+
+  const handleBatchSelectAll = useCallback(() => {
+    setBatchSelectedFiles(new Set(filteredFiles.map(file => file.filePath)))
+  }, [filteredFiles])
+
+  const handleBatchClear = useCallback(() => {
+    setBatchSelectedFiles(new Set())
+  }, [])
+
   const saveActive = isDirty && !!selectedFile
 
   return (
@@ -283,10 +313,17 @@ export default function App() {
           allFiles={nfoFiles}
           selectedFile={selectedFile}
           dirtyFiles={dirtyFiles}
+          batchMode={batchMode}
+          batchSelectedFiles={batchSelectedFiles}
+          isBatchWriting={isBatchWriting}
           filterText={filterText}
           onFilterChange={setFilterText}
           onSelectFile={handleSelectFile}
           onOpenFolder={handleOpenFolder}
+          onBatchToggle={handleBatchToggle}
+          onBatchSelectFile={handleBatchSelectFile}
+          onBatchSelectAll={handleBatchSelectAll}
+          onBatchClear={handleBatchClear}
           folderPath={folderPath}
           appVersion={appVersion}
         />

@@ -3,17 +3,24 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { ScrollArea } from './ui/scroll-area'
 import { Separator } from './ui/separator'
-import { FolderOpen, Search } from 'lucide-react'
+import { CheckSquare, FolderOpen, Search } from 'lucide-react'
 
 interface FileListProps {
   files: NfoFile[]
   allFiles: NfoFile[]
   selectedFile: NfoFile | null
   dirtyFiles: Set<string>
+  batchMode: boolean
+  batchSelectedFiles: Set<string>
+  isBatchWriting: boolean
   filterText: string
   onFilterChange: (v: string) => void
   onSelectFile: (f: NfoFile) => void
   onOpenFolder: () => void
+  onBatchToggle: () => void
+  onBatchSelectFile: (filePath: string, selected: boolean) => void | Promise<void>
+  onBatchSelectAll: () => void
+  onBatchClear: () => void
   folderPath: string
   appVersion?: string
 }
@@ -23,13 +30,22 @@ export default function FileList({
   allFiles,
   selectedFile,
   dirtyFiles,
+  batchMode,
+  batchSelectedFiles,
+  isBatchWriting,
   filterText,
   onFilterChange,
   onSelectFile,
   onOpenFolder,
+  onBatchToggle,
+  onBatchSelectFile,
+  onBatchSelectAll,
+  onBatchClear,
   folderPath,
   appVersion,
 }: FileListProps) {
+  const folderLabel = folderPath.replace(/\\/g, '/').split('/').pop() || folderPath
+
   return (
     <div
       style={{
@@ -63,6 +79,28 @@ export default function FileList({
           <span className="leading-none">{allFiles.length > 0 ? 'Change Folder...' : 'Select Folder...'}</span>
         </Button>
 
+        {allFiles.length > 0 && (
+          <Button
+            variant="outline"
+            onClick={onBatchToggle}
+            disabled={isBatchWriting}
+            className="no-drag w-full justify-center gap-2 font-ui"
+            style={{
+              background: batchMode ? 'var(--bg-elevated)' : 'transparent',
+              border: `1px solid ${batchMode ? 'var(--accent-indigo)' : 'var(--border-default)'}`,
+              color: batchMode ? 'var(--accent-indigo)' : 'var(--text-muted)',
+              borderRadius: 5,
+              fontSize: 12,
+              fontWeight: 500,
+              height: 34,
+              padding: '0 12px',
+            }}
+          >
+            <CheckSquare className="h-3.5 w-3.5 shrink-0" />
+            <span className="leading-none">{batchMode ? 'Batch Edit On' : 'Batch Edit'}</span>
+          </Button>
+        )}
+
         {/* Search */}
         <div className="relative">
           <Search
@@ -90,24 +128,71 @@ export default function FileList({
 
       {/* File count */}
       {allFiles.length > 0 && (
-        <div
-          className="font-mono"
-          style={{
-            padding: '6px 12px',
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            borderBottom: '1px solid var(--border-subtle)',
-          }}
-        >
-          {files.length === allFiles.length
-            ? `${allFiles.length} files`
-            : `${files.length} / ${allFiles.length} files`}
-          {folderPath && (
-            <span style={{ marginLeft: 4, opacity: 0.6 }}>
-              · {folderPath.split('/').pop() || folderPath}
-            </span>
+        <>
+          <div
+            className="font-mono"
+            style={{
+              padding: '6px 12px',
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              borderBottom: '1px solid var(--border-subtle)',
+            }}
+          >
+            {files.length === allFiles.length
+              ? `${allFiles.length} files`
+              : `${files.length} / ${allFiles.length} files`}
+            {folderPath && (
+              <span style={{ marginLeft: 4, opacity: 0.6 }}>
+                · {folderLabel}
+              </span>
+            )}
+          </div>
+          {batchMode && (
+            <div
+              className="font-mono flex items-center gap-2"
+              style={{
+                padding: '5px 12px 6px',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                borderBottom: '1px solid var(--border-subtle)',
+              }}
+            >
+              <span>{batchSelectedFiles.size} selected</span>
+              <span style={{ opacity: 0.45 }}>·</span>
+              <button
+                type="button"
+                disabled={isBatchWriting}
+                onClick={onBatchSelectAll}
+                style={{
+                  color: 'var(--accent-indigo)',
+                  cursor: isBatchWriting ? 'not-allowed' : 'pointer',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  font: 'inherit',
+                }}
+              >
+                All
+              </button>
+              <span style={{ opacity: 0.45 }}>·</span>
+              <button
+                type="button"
+                disabled={isBatchWriting}
+                onClick={onBatchClear}
+                style={{
+                  color: 'var(--accent-indigo)',
+                  cursor: isBatchWriting ? 'not-allowed' : 'pointer',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  font: 'inherit',
+                }}
+              >
+                Clear
+              </button>
+            </div>
           )}
-        </div>
+        </>
       )}
 
       {/* File list */}
@@ -139,71 +224,116 @@ export default function FileList({
         )}
         {files.map(file => {
           const isSelected = selectedFile?.filePath === file.filePath
+          const isBatchSelected = batchSelectedFiles.has(file.filePath)
           const isDirty = dirtyFiles.has(file.filePath)
+          const isActive = batchMode ? isBatchSelected : isSelected
           return (
             <button
               key={file.filePath}
-              onClick={() => onSelectFile(file)}
+              type="button"
+              disabled={isBatchWriting}
+              onClick={() => {
+                if (batchMode) onBatchSelectFile(file.filePath, !isBatchSelected)
+                else onSelectFile(file)
+              }}
               style={{
                 width: '100%',
                 textAlign: 'left',
                 padding: '10px 12px',
-                background: isSelected ? 'var(--bg-elevated)' : 'transparent',
-                borderLeft: isSelected ? '3px solid var(--accent-amber)' : '3px solid transparent',
+                background: isActive ? 'var(--bg-elevated)' : 'transparent',
+                borderLeft: batchMode
+                  ? isActive
+                    ? '3px solid var(--accent-indigo)'
+                    : '3px solid transparent'
+                  : isSelected
+                    ? '3px solid var(--accent-amber)'
+                    : '3px solid transparent',
                 borderTop: 'none',
                 borderRight: 'none',
                 borderBottom: '1px solid var(--border-subtle)',
-                cursor: 'pointer',
+                cursor: isBatchWriting ? 'not-allowed' : 'pointer',
                 position: 'relative',
                 transition: 'background 100ms',
+                opacity: isBatchWriting ? 0.7 : 1,
               }}
               onMouseEnter={e => {
-                if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'
+                if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'
               }}
               onMouseLeave={e => {
-                if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+                if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
               }}
             >
-              {isDirty && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    right: 10,
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'var(--accent-amber)',
-                  }}
-                />
-              )}
-              <div
-                className="font-mono"
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: isSelected ? 'var(--accent-amber)' : 'var(--text-primary)',
-                  letterSpacing: '0.02em',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {file.folderName}
-              </div>
-              <div
-                className="font-ui"
-                style={{
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  marginTop: 2,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-                title={file.filePath}
-              >
-                {file.filePath}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                {batchMode && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      marginTop: 1,
+                      width: 14,
+                      height: 14,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      borderRadius: 3,
+                      border: `1px solid ${isBatchSelected ? 'var(--accent-indigo)' : 'var(--border-default)'}`,
+                      background: isBatchSelected ? 'var(--accent-indigo)' : 'transparent',
+                      color: isBatchSelected ? 'white' : 'var(--text-muted)',
+                      opacity: isBatchSelected ? 1 : 0.75,
+                    }}
+                  >
+                    {isBatchSelected && <CheckSquare className="h-3 w-3" />}
+                  </span>
+                )}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  {isDirty && !batchMode && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 12,
+                        right: 10,
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--accent-amber)',
+                      }}
+                    />
+                  )}
+                  <div
+                    className="font-mono"
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: batchMode
+                        ? isBatchSelected
+                          ? 'var(--accent-indigo)'
+                          : 'var(--text-primary)'
+                        : isSelected
+                          ? 'var(--accent-amber)'
+                          : 'var(--text-primary)',
+                      letterSpacing: '0.02em',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {file.folderName}
+                  </div>
+                  <div
+                    className="font-ui"
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      marginTop: 2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={file.filePath}
+                  >
+                    {file.filePath}
+                  </div>
+                </div>
               </div>
             </button>
           )
