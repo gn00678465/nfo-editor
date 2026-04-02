@@ -72,12 +72,8 @@ export default function App() {
   const [isDirty, setIsDirty] = useState(false)
   // Track which files have unsaved changes by path
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
-  const [batchMode, setBatchMode] = useState(false)
-  const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
-  const [isBatchWriting] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
-  const [folderPath, setFolderPath] = useState<string>('')
   const [appVersion, setAppVersion] = useState<string>('')
 
   // Browser-only: file handle map for File System Access API
@@ -91,7 +87,6 @@ export default function App() {
       if (isElectron) {
         const fp = await window.electronAPI!.openFolder()
         if (!fp) return
-        setFolderPath(fp)
         const files = await window.electronAPI!.scanNfoFiles(fp)
         const list: NfoFile[] = files.map(f => ({
           filePath: f,
@@ -110,7 +105,6 @@ export default function App() {
           const handles: FileHandleMap = new Map()
           await scanNfoFilesFromDir(dirHandle, handles, dirHandle.name)
           fileHandles.current = handles
-          setFolderPath(dirHandle.name)
           const list: NfoFile[] = Array.from(handles.keys()).map(fp => ({
             filePath: fp,
             folderName: parentName(fp),
@@ -127,8 +121,6 @@ export default function App() {
       setCurrentData(null)
       setIsDirty(false)
       setDirtyFiles(new Set())
-      setBatchMode(false)
-      setBatchSelectedFiles(new Set())
       setFilterText('')
       setSaveStatus('idle')
     } finally {
@@ -262,31 +254,6 @@ export default function App() {
       )
     : nfoFiles
 
-  const handleBatchToggle = useCallback(() => {
-    setBatchMode(prev => {
-      const next = !prev
-      if (!next) setBatchSelectedFiles(new Set())
-      return next
-    })
-  }, [])
-
-  const handleBatchSelectFile = useCallback((filePath: string, selected: boolean) => {
-    setBatchSelectedFiles(prev => {
-      const next = new Set(prev)
-      if (selected) next.add(filePath)
-      else next.delete(filePath)
-      return next
-    })
-  }, [])
-
-  const handleBatchSelectAll = useCallback(() => {
-    setBatchSelectedFiles(new Set(filteredFiles.map(file => file.filePath)))
-  }, [filteredFiles])
-
-  const handleBatchClear = useCallback(() => {
-    setBatchSelectedFiles(new Set())
-  }, [])
-
   const saveActive = isDirty && !!selectedFile
 
   return (
@@ -313,18 +280,10 @@ export default function App() {
           allFiles={nfoFiles}
           selectedFile={selectedFile}
           dirtyFiles={dirtyFiles}
-          batchMode={batchMode}
-          batchSelectedFiles={batchSelectedFiles}
-          isBatchWriting={isBatchWriting}
           filterText={filterText}
           onFilterChange={setFilterText}
           onSelectFile={handleSelectFile}
           onOpenFolder={handleOpenFolder}
-          onBatchToggle={handleBatchToggle}
-          onBatchSelectFile={handleBatchSelectFile}
-          onBatchSelectAll={handleBatchSelectAll}
-          onBatchClear={handleBatchClear}
-          folderPath={folderPath}
           appVersion={appVersion}
         />
 

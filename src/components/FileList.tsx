@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import type { NfoFile } from '../App'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -10,18 +11,10 @@ interface FileListProps {
   allFiles: NfoFile[]
   selectedFile: NfoFile | null
   dirtyFiles: Set<string>
-  batchMode: boolean
-  batchSelectedFiles: Set<string>
-  isBatchWriting: boolean
   filterText: string
   onFilterChange: (v: string) => void
   onSelectFile: (f: NfoFile) => void
-  onOpenFolder: () => void
-  onBatchToggle: () => void
-  onBatchSelectFile: (filePath: string, selected: boolean) => void | Promise<void>
-  onBatchSelectAll: () => void
-  onBatchClear: () => void
-  folderPath: string
+  onOpenFolder: () => void | Promise<void>
   appVersion?: string
 }
 
@@ -30,21 +23,48 @@ export default function FileList({
   allFiles,
   selectedFile,
   dirtyFiles,
-  batchMode,
-  batchSelectedFiles,
-  isBatchWriting,
   filterText,
   onFilterChange,
   onSelectFile,
   onOpenFolder,
-  onBatchToggle,
-  onBatchSelectFile,
-  onBatchSelectAll,
-  onBatchClear,
-  folderPath,
   appVersion,
 }: FileListProps) {
-  const folderLabel = folderPath.replace(/\\/g, '/').split('/').pop() || folderPath
+  const [batchMode, setBatchMode] = useState(false)
+  const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
+
+  const handleOpenFolder = useCallback(async () => {
+    try {
+      await onOpenFolder()
+    } finally {
+      setBatchMode(false)
+      setBatchSelectedFiles(new Set())
+    }
+  }, [onOpenFolder])
+
+  const handleBatchToggle = useCallback(() => {
+    setBatchMode(prev => {
+      const next = !prev
+      if (!next) setBatchSelectedFiles(new Set())
+      return next
+    })
+  }, [])
+
+  const handleBatchSelectFile = useCallback((filePath: string, selected: boolean) => {
+    setBatchSelectedFiles(prev => {
+      const next = new Set(prev)
+      if (selected) next.add(filePath)
+      else next.delete(filePath)
+      return next
+    })
+  }, [])
+
+  const handleBatchSelectAll = useCallback(() => {
+    setBatchSelectedFiles(new Set(files.map(file => file.filePath)))
+  }, [files])
+
+  const handleBatchClear = useCallback(() => {
+    setBatchSelectedFiles(new Set())
+  }, [])
 
   return (
     <div
@@ -62,7 +82,7 @@ export default function FileList({
       <div className="p-3 flex flex-col gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         <Button
           variant="outline"
-          onClick={onOpenFolder}
+          onClick={handleOpenFolder}
           className="no-drag w-full justify-center gap-2 font-ui"
           style={{
             background: 'transparent',
@@ -82,8 +102,7 @@ export default function FileList({
         {allFiles.length > 0 && (
           <Button
             variant="outline"
-            onClick={onBatchToggle}
-            disabled={isBatchWriting}
+            onClick={handleBatchToggle}
             className="no-drag w-full justify-center gap-2 font-ui"
             style={{
               background: batchMode ? 'var(--bg-elevated)' : 'transparent',
@@ -97,7 +116,7 @@ export default function FileList({
             }}
           >
             <CheckSquare className="h-3.5 w-3.5 shrink-0" />
-            <span className="leading-none">{batchMode ? 'Batch Edit On' : 'Batch Edit'}</span>
+            <span className="leading-none">{batchMode ? 'Exit Batch Edit' : 'Batch Edit'}</span>
           </Button>
         )}
 
@@ -141,11 +160,6 @@ export default function FileList({
             {files.length === allFiles.length
               ? `${allFiles.length} files`
               : `${files.length} / ${allFiles.length} files`}
-            {folderPath && (
-              <span style={{ marginLeft: 4, opacity: 0.6 }}>
-                · {folderLabel}
-              </span>
-            )}
           </div>
           {batchMode && (
             <div
@@ -161,11 +175,10 @@ export default function FileList({
               <span style={{ opacity: 0.45 }}>·</span>
               <button
                 type="button"
-                disabled={isBatchWriting}
-                onClick={onBatchSelectAll}
+                onClick={handleBatchSelectAll}
                 style={{
                   color: 'var(--accent-indigo)',
-                  cursor: isBatchWriting ? 'not-allowed' : 'pointer',
+                  cursor: 'pointer',
                   background: 'transparent',
                   border: 'none',
                   padding: 0,
@@ -177,11 +190,10 @@ export default function FileList({
               <span style={{ opacity: 0.45 }}>·</span>
               <button
                 type="button"
-                disabled={isBatchWriting}
-                onClick={onBatchClear}
+                onClick={handleBatchClear}
                 style={{
                   color: 'var(--accent-indigo)',
-                  cursor: isBatchWriting ? 'not-allowed' : 'pointer',
+                  cursor: 'pointer',
                   background: 'transparent',
                   border: 'none',
                   padding: 0,
@@ -231,9 +243,8 @@ export default function FileList({
             <button
               key={file.filePath}
               type="button"
-              disabled={isBatchWriting}
               onClick={() => {
-                if (batchMode) onBatchSelectFile(file.filePath, !isBatchSelected)
+                if (batchMode) handleBatchSelectFile(file.filePath, !isBatchSelected)
                 else onSelectFile(file)
               }}
               style={{
@@ -251,10 +262,10 @@ export default function FileList({
                 borderTop: 'none',
                 borderRight: 'none',
                 borderBottom: '1px solid var(--border-subtle)',
-                cursor: isBatchWriting ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 position: 'relative',
                 transition: 'background 100ms',
-                opacity: isBatchWriting ? 0.7 : 1,
+                opacity: 1,
               }}
               onMouseEnter={e => {
                 if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'
