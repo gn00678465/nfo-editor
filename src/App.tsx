@@ -249,12 +249,15 @@ export default function App() {
     })
   }, [])
 
+  const filteredFiles = filterText.trim()
+    ? nfoFiles.filter(f =>
+        f.filePath.toLowerCase().includes(filterText.toLowerCase())
+      )
+    : nfoFiles
+
   const handleBatchSelectAll = useCallback(() => {
-    const filtered = filterText.trim()
-      ? nfoFiles.filter(f => f.filePath.toLowerCase().includes(filterText.toLowerCase()))
-      : nfoFiles
-    setBatchSelectedFiles(new Set(filtered.map(file => file.filePath)))
-  }, [nfoFiles, filterText])
+    setBatchSelectedFiles(new Set(filteredFiles.map(file => file.filePath)))
+  }, [filteredFiles])
 
   const handleBatchClear = useCallback(() => {
     setBatchSelectedFiles(new Set())
@@ -282,12 +285,6 @@ export default function App() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave])
-
-  const filteredFiles = filterText.trim()
-    ? nfoFiles.filter(f =>
-        f.filePath.toLowerCase().includes(filterText.toLowerCase())
-      )
-    : nfoFiles
 
   const saveActive = isDirty && !!selectedFile
 
