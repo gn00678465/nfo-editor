@@ -52,24 +52,38 @@ export function diffActors(loadedData: Record<string, NfoData>): ActorDiff[] {
   }>()
 
   for (const filePath of filePaths) {
-    const seenInFile = new Set<string>()
+    const perFileActors = new Map<string, {
+      actor: Actor
+      roles: Set<string>
+    }>()
+
     for (const actor of loadedData[filePath].actors) {
       if (!actor.name) continue
-      const existing = actorMap.get(actor.name)
+      const existing = perFileActors.get(actor.name)
       if (!existing) {
-        actorMap.set(actor.name, {
+        perFileActors.set(actor.name, {
           actor: cloneActor(actor),
-          fileCount: 1,
           roles: new Set([actor.role ?? '']),
         })
-        seenInFile.add(actor.name)
+      } else {
+        existing.roles.add(actor.role ?? '')
+      }
+    }
+
+    for (const [name, entry] of perFileActors) {
+      const existing = actorMap.get(name)
+      if (!existing) {
+        actorMap.set(name, {
+          actor: entry.actor,
+          fileCount: 1,
+          roles: new Set(entry.roles),
+        })
         continue
       }
 
-      if (!seenInFile.has(actor.name)) {
-        existing.fileCount += 1
-        existing.roles.add(actor.role ?? '')
-        seenInFile.add(actor.name)
+      existing.fileCount += 1
+      for (const role of entry.roles) {
+        existing.roles.add(role)
       }
     }
   }
@@ -105,6 +119,10 @@ export function applyBatchActorOps(
 
   const removeSet = new Set(ops.removals)
   next.actors = next.actors.filter(actor => !removeSet.has(actor.name))
+  next.actors = next.actors.map((actor, index) => ({
+    ...actor,
+    order: index,
+  }))
 
   for (const [originalName, update] of Object.entries(ops.edits)) {
     const index = next.actors.findIndex(actor => actor.name === originalName)

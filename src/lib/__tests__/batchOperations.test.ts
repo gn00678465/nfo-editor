@@ -49,7 +49,21 @@ describe('diffActors', () => {
     expect(alice).toMatchObject({ fileCount: 1, totalFiles: 2 })
   })
 
-  it('sets rolesDiffer=true when same name has different roles across files', () => {
+  it('counts each file once even when the same actor appears multiple times in one file', () => {
+    const data = {
+      'a.nfo': makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Alice', role: 'Support' },
+      ]),
+      'b.nfo': makeNfoData([{ name: 'Alice', role: 'Lead' }]),
+    }
+
+    const result = diffActors(data)
+
+    expect(result[0]).toMatchObject({ fileCount: 2, totalFiles: 2 })
+  })
+
+  it('detects differing roles between files without intra-file duplicates', () => {
     const data = {
       'a.nfo': makeNfoData([{ name: 'Alice', role: 'Lead' }]),
       'b.nfo': makeNfoData([{ name: 'Alice', role: 'Support' }]),
@@ -57,7 +71,27 @@ describe('diffActors', () => {
 
     const result = diffActors(data)
 
-    expect(result[0].rolesDiffer).toBe(true)
+    expect(result[0]).toMatchObject({ fileCount: 2, rolesDiffer: true })
+  })
+
+  it('detects differing roles across duplicate entries regardless of order within a file', () => {
+    const leadFirst = diffActors({
+      'a.nfo': makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Alice', role: 'Support' },
+      ]),
+      'b.nfo': makeNfoData([{ name: 'Alice', role: 'Lead' }]),
+    })
+    const supportFirst = diffActors({
+      'a.nfo': makeNfoData([
+        { name: 'Alice', role: 'Support' },
+        { name: 'Alice', role: 'Lead' },
+      ]),
+      'b.nfo': makeNfoData([{ name: 'Alice', role: 'Lead' }]),
+    })
+
+    expect(leadFirst[0].rolesDiffer).toBe(true)
+    expect(supportFirst[0].rolesDiffer).toBe(true)
   })
 
   it('uses first-file data for display actor', () => {
@@ -81,17 +115,6 @@ describe('diffActors', () => {
 
     expect(result[0].actor.name).toBe('Alice')
     expect(result[1].actor.name).toBe('Bob')
-  })
-
-  it('ignores duplicate actor entries within the same file when computing role differences', () => {
-    const data = {
-      'a.nfo': makeNfoData([{ name: 'Alice', role: 'Lead' }, { name: 'Alice', role: 'Support' }]),
-      'b.nfo': makeNfoData([{ name: 'Alice', role: 'Lead' }]),
-    }
-
-    const result = diffActors(data)
-
-    expect(result[0].rolesDiffer).toBe(false)
   })
 })
 
@@ -135,6 +158,20 @@ describe('applyBatchActorOps', () => {
 
     expect(result.actors).toHaveLength(1)
     expect(result.actors[0].name).toBe('Alice')
+  })
+
+  it('normalizes order after removals before assigning adds', () => {
+    const data = makeNfoData([
+      { name: 'Alice', order: 0 },
+      { name: 'Bob', order: 1 },
+      { name: 'Charlie', order: 2 },
+    ])
+    const ops = { adds: [{ name: 'Dave' }], removals: ['Bob'], edits: {} }
+
+    const { data: result } = applyBatchActorOps(data, ops)
+
+    expect(result.actors.map(actor => actor.order)).toEqual([0, 1, 2])
+    expect(result.actors.map(actor => actor.name)).toEqual(['Alice', 'Charlie', 'Dave'])
   })
 
   it('skips missing removal with no conflict', () => {
