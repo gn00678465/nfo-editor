@@ -1,4 +1,3 @@
-import { useCallback, useState } from 'react'
 import type { NfoFile } from '../App'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -16,6 +15,13 @@ interface FileListProps {
   onSelectFile: (f: NfoFile) => void
   onOpenFolder: () => void | Promise<void>
   appVersion?: string
+  batchMode: boolean
+  batchSelectedFiles: Set<string>
+  isBatchWriting: boolean
+  onBatchToggle: () => void
+  onBatchSelectFile: (filePath: string, selected: boolean) => void | Promise<void>
+  onBatchSelectAll: () => void
+  onBatchClear: () => void
 }
 
 export default function FileList({
@@ -28,43 +34,14 @@ export default function FileList({
   onSelectFile,
   onOpenFolder,
   appVersion,
+  batchMode,
+  batchSelectedFiles,
+  isBatchWriting,
+  onBatchToggle,
+  onBatchSelectFile,
+  onBatchSelectAll,
+  onBatchClear,
 }: FileListProps) {
-  const [batchMode, setBatchMode] = useState(false)
-  const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
-
-  const handleOpenFolder = useCallback(async () => {
-    try {
-      await onOpenFolder()
-    } finally {
-      setBatchMode(false)
-      setBatchSelectedFiles(new Set())
-    }
-  }, [onOpenFolder])
-
-  const handleBatchToggle = useCallback(() => {
-    setBatchMode(prev => {
-      const next = !prev
-      if (!next) setBatchSelectedFiles(new Set())
-      return next
-    })
-  }, [])
-
-  const handleBatchSelectFile = useCallback((filePath: string, selected: boolean) => {
-    setBatchSelectedFiles(prev => {
-      const next = new Set(prev)
-      if (selected) next.add(filePath)
-      else next.delete(filePath)
-      return next
-    })
-  }, [])
-
-  const handleBatchSelectAll = useCallback(() => {
-    setBatchSelectedFiles(new Set(files.map(file => file.filePath)))
-  }, [files])
-
-  const handleBatchClear = useCallback(() => {
-    setBatchSelectedFiles(new Set())
-  }, [])
 
   return (
     <div
@@ -82,7 +59,7 @@ export default function FileList({
       <div className="p-3 flex flex-col gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         <Button
           variant="outline"
-          onClick={handleOpenFolder}
+          onClick={onOpenFolder}
           className="no-drag w-full justify-center gap-2 font-ui"
           style={{
             background: 'transparent',
@@ -102,7 +79,8 @@ export default function FileList({
         {allFiles.length > 0 && (
           <Button
             variant="outline"
-            onClick={handleBatchToggle}
+            onClick={onBatchToggle}
+            disabled={isBatchWriting}
             className="no-drag w-full justify-center gap-2 font-ui"
             style={{
               background: batchMode ? 'var(--bg-elevated)' : 'transparent',
@@ -175,7 +153,7 @@ export default function FileList({
               <span style={{ opacity: 0.45 }}>·</span>
               <button
                 type="button"
-                onClick={handleBatchSelectAll}
+                onClick={onBatchSelectAll}
                 style={{
                   color: 'var(--accent-indigo)',
                   cursor: 'pointer',
@@ -190,7 +168,7 @@ export default function FileList({
               <span style={{ opacity: 0.45 }}>·</span>
               <button
                 type="button"
-                onClick={handleBatchClear}
+                onClick={onBatchClear}
                 style={{
                   color: 'var(--accent-indigo)',
                   cursor: 'pointer',
@@ -244,7 +222,7 @@ export default function FileList({
               key={file.filePath}
               type="button"
               onClick={() => {
-                if (batchMode) handleBatchSelectFile(file.filePath, !isBatchSelected)
+                if (batchMode) onBatchSelectFile(file.filePath, !isBatchSelected)
                 else onSelectFile(file)
               }}
               style={{

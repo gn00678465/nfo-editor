@@ -75,6 +75,10 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [appVersion, setAppVersion] = useState<string>('')
+  // Batch edit state
+  const [batchMode, setBatchMode] = useState(false)
+  const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
+  const [isBatchWriting, setIsBatchWriting] = useState(false)
 
   // Browser-only: file handle map for File System Access API
   const fileHandles = useRef<FileHandleMap>(new Map())
@@ -123,6 +127,9 @@ export default function App() {
       setDirtyFiles(new Set())
       setFilterText('')
       setSaveStatus('idle')
+      // Reset batch state when opening a new folder
+      setBatchMode(false)
+      setBatchSelectedFiles(new Set())
     } finally {
       isPickerOpen.current = false
     }
@@ -225,6 +232,34 @@ export default function App() {
     })
   }, [originalData, selectedFile])
 
+  const handleBatchToggle = useCallback(() => {
+    setBatchMode(prev => {
+      const next = !prev
+      if (!next) setBatchSelectedFiles(new Set())
+      return next
+    })
+  }, [])
+
+  const handleBatchSelectFile = useCallback((filePath: string, selected: boolean) => {
+    setBatchSelectedFiles(prev => {
+      const next = new Set(prev)
+      if (selected) next.add(filePath)
+      else next.delete(filePath)
+      return next
+    })
+  }, [])
+
+  const handleBatchSelectAll = useCallback(() => {
+    const filtered = filterText.trim()
+      ? nfoFiles.filter(f => f.filePath.toLowerCase().includes(filterText.toLowerCase()))
+      : nfoFiles
+    setBatchSelectedFiles(new Set(filtered.map(file => file.filePath)))
+  }, [nfoFiles, filterText])
+
+  const handleBatchClear = useCallback(() => {
+    setBatchSelectedFiles(new Set())
+  }, [])
+
   // Fetch app version on mount
   useEffect(() => {
     if (window.electronAPI?.getAppVersion) {
@@ -285,6 +320,13 @@ export default function App() {
           onSelectFile={handleSelectFile}
           onOpenFolder={handleOpenFolder}
           appVersion={appVersion}
+          batchMode={batchMode}
+          batchSelectedFiles={batchSelectedFiles}
+          isBatchWriting={isBatchWriting}
+          onBatchToggle={handleBatchToggle}
+          onBatchSelectFile={handleBatchSelectFile}
+          onBatchSelectAll={handleBatchSelectAll}
+          onBatchClear={handleBatchClear}
         />
 
         {/* RIGHT PANEL */}
