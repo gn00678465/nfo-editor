@@ -78,7 +78,7 @@ interface ActorRowProps {
   diff: ActorDiff
   removed: boolean
   editing: boolean
-  stagedEdit: Pick<Actor, 'name' | 'role'> | undefined
+  stagedEdit: { name: string; role?: string } | undefined
   editDraft: { name: string; role: string }
   onStartEdit: () => void
   onCommitEdit: () => void
@@ -311,6 +311,7 @@ export default function BatchEditor({
   const [view, setView] = useState<View>('edit')
   const [ops, setOps] = useState<BatchActorOps>(EMPTY_OPS)
   const [results, setResults] = useState<ApplyResult[]>([])
+  const [applyError, setApplyError] = useState<string | null>(null)
 
   // Inline edit state
   const [editingActor, setEditingActor] = useState<string | null>(null)
@@ -357,13 +358,23 @@ export default function BatchEditor({
     const name = editDraft.name.trim()
     if (!name) return
     const diff = actorDiffs.find(d => d.actor.name === originalName)
-    const unchanged = name === originalName && editDraft.role === (diff?.actor.role ?? '')
+    
+    // Determine if role was intentionally changed
+    const originalRole = diff?.actor.role ?? ''
+    const roleChanged = editDraft.role !== originalRole
+    const rolePreserved = diff?.rolesDiffer && !roleChanged
+    
+    const unchanged = name === originalName && !roleChanged
+    
     setOps(prev => {
       const next = { ...prev, edits: { ...prev.edits } }
       if (unchanged) {
         delete next.edits[originalName]
       } else {
-        next.edits[originalName] = { name, role: editDraft.role }
+        next.edits[originalName] = {
+          name,
+          ...(rolePreserved ? {} : { role: editDraft.role }),
+        }
       }
       return next
     })
@@ -398,15 +409,22 @@ export default function BatchEditor({
   }, [])
 
   const handleApply = useCallback(async () => {
-    const r = await onApply(ops)
-    setResults(r)
-    setView('result')
+    try {
+      setApplyError(null)
+      const r = await onApply(ops)
+      setResults(r)
+      setView('result')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setApplyError(message)
+    }
   }, [ops, onApply])
 
   const handleReset = useCallback(() => {
     setOps(EMPTY_OPS)
     setView('edit')
     setResults([])
+    setApplyError(null)
     setEditingActor(null)
     setAddName('')
     setAddRole('')
@@ -789,6 +807,26 @@ export default function BatchEditor({
             <strong style={{ color: 'var(--text-primary)' }}>{totalFiles}</strong>{' '}
             selected files. This cannot be automatically undone.
           </div>
+
+          {/* Error Display */}
+          {applyError && (
+            <div
+              style={{
+                marginTop: 12, padding: '12px 14px',
+                background: 'rgba(239,68,68,0.05)',
+                border: '1px solid rgba(239,68,68,0.3)',
+                borderRadius: 6, fontSize: 12,
+                color: 'var(--accent-red)',
+                lineHeight: 1.5,
+              }}
+            >
+              <XCircle
+                size={13}
+                style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }}
+              />
+              <strong>Error:</strong> {applyError}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

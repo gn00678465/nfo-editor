@@ -202,11 +202,20 @@ describe('applyBatchActorOps', () => {
 
   it('keeps existing role when edit omits role', () => {
     const data = makeNfoData([{ name: 'Alice', role: 'Lead' }])
-    const ops = { adds: [], removals: [], edits: { Alice: { name: 'Alicia' } as { name: string; role?: string } } }
+    const ops = { adds: [], removals: [], edits: { Alice: { name: 'Alicia' } } }
 
     const { data: result } = applyBatchActorOps(data, ops)
 
     expect(result.actors[0].role).toBe('Lead')
+  })
+
+  it('preserves each file role when edit omits role field', () => {
+    const data = makeNfoData([{ name: 'Alice', role: 'Original Role' }])
+    const ops = { adds: [], removals: [], edits: { Alice: { name: 'Alice' } } }
+
+    const { data: result } = applyBatchActorOps(data, ops)
+
+    expect(result.actors[0].role).toBe('Original Role')
   })
 
   it('allows remove and re-add of the same name in one batch', () => {

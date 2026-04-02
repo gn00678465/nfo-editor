@@ -3,7 +3,7 @@ import type { Actor, NfoData } from './nfoParser'
 export interface BatchActorOps {
   adds: Actor[]
   removals: string[]
-  edits: Record<string, Pick<Actor, 'name' | 'role'>>
+  edits: Record<string, { name: string; role?: string }>
 }
 
 export interface ActorDiff {
@@ -139,7 +139,7 @@ export function applyBatchActorOps(
     next.actors[index] = {
       ...current,
       name: targetName,
-      role: update.role ?? current.role,
+      ...(update.role !== undefined && { role: update.role }),
     }
   }
 
