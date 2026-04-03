@@ -369,6 +369,28 @@ describe('applyBatchActorOps', () => {
       expect(result.actors[0]).toMatchObject({ name: 'Bob', role: 'Lead' })
     })
 
+    it('rejects rename to same-name role-only edit target because it does not vacate the name', () => {
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Bob', role: 'Support' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Bob' },
+          Bob: { name: 'Bob', role: 'Featured' },
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toContain('Alice')
+      expect(conflicts).not.toContain('Bob')
+      expect(result.actors[0]).toMatchObject({ name: 'Alice', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'Bob', role: 'Featured' })
+    })
+
     it('rejects multiple sources targeting same non-renamed destination', () => {
       const data = makeNfoData([
         { name: 'Alice', role: 'Lead' },

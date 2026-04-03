@@ -21,7 +21,7 @@ export function isNoOpActorEdit(
   editDraft: { name: string; role: string },
   roleMode: 'preserve' | 'normalize',
 ): boolean {
-  const nameUnchanged = editDraft.name.trim() === originalName
+  const nameUnchanged = editDraft.name.trim() === originalName.trim()
   const preservingRoles = roleMode === 'preserve'
   const roleUnchanged = editDraft.role === (diff.actor.role ?? '')
 
@@ -142,8 +142,12 @@ export function applyBatchActorOps(
   // Build atomic view: what names exist after removals but before edits
   const existingNames = new Set(next.actors.map(a => a.name))
   
-  // Build mapping of source -> target for all edits
-  const editSources = new Set(Object.keys(ops.edits))
+  // Only sources that actually rename away vacate their original name
+  const renamingSources = new Set(
+    Object.entries(ops.edits)
+      .filter(([originalName, update]) => update.name.trim() !== originalName)
+      .map(([originalName]) => originalName),
+  )
   
   // Filter ops.edits to only those actually present in this file
   const relevantEdits = Object.entries(ops.edits).filter(([originalName]) =>
@@ -153,7 +157,7 @@ export function applyBatchActorOps(
   // Count how many sources (present in THIS file) target each destination name
   const targetCounts = new Map<string, string[]>()
   for (const [originalName, update] of relevantEdits) {
-    const targetName = update.name
+    const targetName = update.name.trim()
     if (targetName === originalName) continue // Skip self-renames
     
     if (!targetCounts.has(targetName)) {
@@ -169,10 +173,10 @@ export function applyBatchActorOps(
   
   // Check for collisions with existing names
   for (const [originalName, update] of relevantEdits) {
-    const targetName = update.name
+    const targetName = update.name.trim()
     if (targetName === originalName) continue
     
-    if (existingNames.has(targetName) && !editSources.has(targetName)) {
+    if (existingNames.has(targetName) && !renamingSources.has(targetName)) {
       conflictingEdits.add(originalName)
     }
   }
@@ -206,7 +210,7 @@ export function applyBatchActorOps(
     
     return {
       ...actor,
-      name: update.name,
+      name: update.name.trim(),
       ...(update.role !== undefined && { role: update.role }),
     }
   })
