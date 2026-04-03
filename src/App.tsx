@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { parseNfo, serializeNfo, emptyNfoData, type NfoData } from './lib/nfoParser'
+import { applyBatchActorOps, type BatchActorOps, type ApplyResult } from './lib/batchOperations'
 import FileList from './components/FileList'
 import MetadataEditor from './components/MetadataEditor'
+import BatchEditor from './components/BatchEditor'
 import ThemeToggle from './components/ThemeToggle'
 import { Button } from './components/ui/button'
 import { Separator } from './components/ui/separator'
@@ -20,6 +22,19 @@ function parentName(p: string): string {
   const parts = p.replace(/\\/g, '/').split('/')
   parts.pop()
   return parts.pop() ?? p
+}
+
+async function readNfoContent(filePath: string, fileHandles: FileHandleMap): Promise<string | undefined> {
+  if (isElectron) {
+    const result = await window.electronAPI!.readFile(filePath)
+    return result.success ? result.content : undefined
+  }
+
+  const handle = fileHandles.get(filePath)
+  if (!handle) return undefined
+
+  const fileObj = await handle.getFile()
+  return fileObj.text()
 }
 
 const isElectron = !!window.electronAPI
@@ -74,66 +89,111 @@ export default function App() {
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
-  const [folderPath, setFolderPath] = useState<string>('')
   const [appVersion, setAppVersion] = useState<string>('')
+  // Batch edit state
+  const [batchMode, setBatchMode] = useState(false)
+  const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
+  const [batchLoadedData, setBatchLoadedData] = useState<Record<string, NfoData>>({})
+  const [batchPreloadErrors, setBatchPreloadErrors] = useState<Set<string>>(new Set())
 
   // Browser-only: file handle map for File System Access API
   const fileHandles = useRef<FileHandleMap>(new Map())
   const isPickerOpen = useRef(false)
+  const selectedFileRef = useRef<NfoFile | null>(null)
+  const currentDataPathRef = useRef<string | null>(null)
+  const currentDataRef = useRef<NfoData | null>(null)
+  const batchLoadedDataRef = useRef<Record<string, NfoData>>({})
+  // Batch session token: incremented on any action that invalidates pending preloads
+  const batchSessionRef = useRef(0)
+  const batchPreloadPendingRef = useRef<Set<string>>(new Set())
+  // Track current batch selection for async validation
+  const batchSelectedRef = useRef<Set<string>>(new Set())
+  // Issue 1 fix: Track latest handleSelectFile request to prevent stale-response race
+  const latestSelectRequestRef = useRef(0)
+
+  useEffect(() => {
+    batchLoadedDataRef.current = batchLoadedData
+  }, [batchLoadedData])
+
+  useEffect(() => {
+    selectedFileRef.current = selectedFile
+  }, [selectedFile])
+
+  useEffect(() => {
+    currentDataRef.current = currentData
+  }, [currentData])
 
   const handleOpenFolder = useCallback(async () => {
     if (isPickerOpen.current) return
     isPickerOpen.current = true
+    // Issue 2 fix: Invalidate pending file-selection reads
+    latestSelectRequestRef.current += 1
     try {
-    if (isElectron) {
-      const fp = await window.electronAPI!.openFolder()
-      if (!fp) return
-      setFolderPath(fp)
-      const files = await window.electronAPI!.scanNfoFiles(fp)
-      const list: NfoFile[] = files.map(f => ({
-        filePath: f,
-        folderName: parentName(f),
-        fileName: basename(f),
-      }))
-      setNfoFiles(list)
-    } else {
-      // Browser fallback using File System Access API
-      if (!('showDirectoryPicker' in window)) {
-        alert('Your browser does not support the File System Access API. Please use Chrome/Edge.')
-        return
-      }
-      try {
-        const dirHandle = await window.showDirectoryPicker!()
-        const handles: FileHandleMap = new Map()
-        await scanNfoFilesFromDir(dirHandle, handles, dirHandle.name)
-        fileHandles.current = handles
-        setFolderPath(dirHandle.name)
-        const list: NfoFile[] = Array.from(handles.keys()).map(fp => ({
-          filePath: fp,
-          folderName: parentName(fp),
-          fileName: basename(fp),
+      if (isElectron) {
+        const fp = await window.electronAPI!.openFolder()
+        if (!fp) return
+        const files = await window.electronAPI!.scanNfoFiles(fp)
+        const list: NfoFile[] = files.map(f => ({
+          filePath: f,
+          folderName: parentName(f),
+          fileName: basename(f),
         }))
         setNfoFiles(list)
-      } catch (e: unknown) {
-        // User cancelled the picker or picker already active
-        if (e instanceof DOMException && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return
-        throw e
+      } else {
+        // Browser fallback using File System Access API
+        if (!('showDirectoryPicker' in window)) {
+          alert('Your browser does not support the File System Access API. Please use Chrome/Edge.')
+          return
+        }
+        try {
+          const dirHandle = await window.showDirectoryPicker!()
+          const handles: FileHandleMap = new Map()
+          await scanNfoFilesFromDir(dirHandle, handles, dirHandle.name)
+          fileHandles.current = handles
+          const list: NfoFile[] = Array.from(handles.keys()).map(fp => ({
+            filePath: fp,
+            folderName: parentName(fp),
+            fileName: basename(fp),
+          }))
+          setNfoFiles(list)
+        } catch (e: unknown) {
+          // User cancelled the picker or picker already active
+          if (e instanceof DOMException && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return
+          throw e
+        }
       }
-    }
-    setSelectedFile(null)
-    setCurrentData(null)
-    setIsDirty(false)
-    setDirtyFiles(new Set())
-    setFilterText('')
-    setSaveStatus('idle')
+      setSelectedFile(null)
+      selectedFileRef.current = null
+      setCurrentData(null)
+      currentDataPathRef.current = null
+      setIsDirty(false)
+      setDirtyFiles(new Set())
+      setFilterText('')
+      setSaveStatus('idle')
+      // Reset batch state when opening a new folder
+      setBatchMode(false)
+      batchSelectedRef.current = new Set()
+      setBatchSelectedFiles(new Set())
+      setBatchLoadedData({})
+      setBatchPreloadErrors(new Set())
+      batchPreloadPendingRef.current = new Set()
+      batchSessionRef.current += 1
     } finally {
       isPickerOpen.current = false
     }
   }, [])
 
   const handleSelectFile = useCallback(async (file: NfoFile) => {
+    // Issue 1 fix: Increment request counter to track latest selection
+    const requestId = ++latestSelectRequestRef.current
+
     setSelectedFile(file)
+    selectedFileRef.current = file
     setSaveStatus('idle')
+    // Issue 1 fix: Clear editor data immediately to prevent showing previous file's content
+    setCurrentData(null)
+    setOriginalData(null)
+    setIsDirty(false)
 
     let content: string | undefined
     if (isElectron) {
@@ -142,14 +202,27 @@ export default function App() {
       else content = result.content
     } else {
       const handle = fileHandles.current.get(file.filePath)
-      if (!handle) { setCurrentData(emptyNfoData()); setIsDirty(false); return }
+      if (!handle) {
+        // Issue 1 fix: Guard against stale response
+        if (requestId !== latestSelectRequestRef.current) return
+        const empty = emptyNfoData()
+        setCurrentData(empty)
+        currentDataPathRef.current = file.filePath
+        setOriginalData(empty)
+        setIsDirty(false)
+        return
+      }
       const fileObj = await handle.getFile()
       content = await fileObj.text()
     }
 
+    // Issue 1 fix: Guard against stale response after async file read
+    if (requestId !== latestSelectRequestRef.current) return
+
     if (!content) {
       const empty = emptyNfoData()
       setCurrentData(empty)
+      currentDataPathRef.current = file.filePath
       setOriginalData(empty)
       setIsDirty(false)
       return
@@ -157,11 +230,13 @@ export default function App() {
     try {
       const data = parseNfo(content)
       setCurrentData(data)
+      currentDataPathRef.current = file.filePath
       setOriginalData(data)
       setIsDirty(dirtyFiles.has(file.filePath))
     } catch {
       const empty = emptyNfoData()
       setCurrentData(empty)
+      currentDataPathRef.current = file.filePath
       setOriginalData(empty)
       setIsDirty(false)
     }
@@ -169,15 +244,24 @@ export default function App() {
 
   const handleDataChange = useCallback((updated: NfoData) => {
     setCurrentData(updated)
+    currentDataRef.current = updated
     setIsDirty(true)
     setSaveStatus('idle')
     if (selectedFile) {
       setDirtyFiles(prev => new Set(prev).add(selectedFile.filePath))
+      // Issue 3 fix: Keep batchLoadedData in sync if active file is batch-selected
+      if (batchSelectedRef.current.has(selectedFile.filePath)) {
+        setBatchLoadedData(prev => ({ ...prev, [selectedFile.filePath]: updated }))
+      }
     }
   }, [selectedFile])
 
   const handleSave = useCallback(async () => {
     if (!selectedFile || !currentData || isSaving) return
+    // Issue 2 fix: Capture the file being saved for stale reconciliation guard
+    const savedFilePath = selectedFile.filePath
+    const savedData = currentData
+
     setIsSaving(true)
     try {
       const xml = serializeNfo(currentData)
@@ -197,20 +281,36 @@ export default function App() {
       }
 
       if (success) {
-        setIsDirty(false)
-        setOriginalData(currentData)
-        setSaveStatus('saved')
-        setDirtyFiles(prev => {
-          const next = new Set(prev)
-          next.delete(selectedFile.filePath)
-          return next
-        })
-        setTimeout(() => setSaveStatus('idle'), 2000)
+        // Issue 2 fix: Only update UI state if the saved file is still active AND data hasn't changed
+        if (selectedFileRef.current?.filePath === savedFilePath &&
+            currentDataRef.current === savedData) {
+          setIsDirty(false)
+          setOriginalData(savedData)
+          setSaveStatus('saved')
+          setTimeout(() => setSaveStatus('idle'), 2000)
+          // Issue 2 fix: Only clear dirty state and update batch cache when save is current
+          setDirtyFiles(prev => {
+            const next = new Set(prev)
+            next.delete(savedFilePath)
+            return next
+          })
+          setBatchLoadedData(prev => (
+            prev[savedFilePath]
+              ? { ...prev, [savedFilePath]: savedData }
+              : prev
+          ))
+        }
       } else {
-        setSaveStatus('error')
+        // Only show error if the saved file is still active
+        if (selectedFileRef.current?.filePath === savedFilePath) {
+          setSaveStatus('error')
+        }
       }
     } catch {
-      setSaveStatus('error')
+      // Only show error if the saved file is still active
+      if (selectedFileRef.current?.filePath === savedFilePath) {
+        setSaveStatus('error')
+      }
     } finally {
       setIsSaving(false)
     }
@@ -219,6 +319,7 @@ export default function App() {
   const handleDiscard = useCallback(() => {
     if (!originalData || !selectedFile) return
     setCurrentData(originalData)
+    currentDataRef.current = originalData
     setIsDirty(false)
     setSaveStatus('idle')
     setDirtyFiles(prev => {
@@ -226,7 +327,337 @@ export default function App() {
       next.delete(selectedFile.filePath)
       return next
     })
+    // Issue 3 fix: Reconcile batch cache when discarding batch-selected file
+    if (batchSelectedRef.current.has(selectedFile.filePath)) {
+      setBatchLoadedData(prev => ({ ...prev, [selectedFile.filePath]: originalData }))
+    }
   }, [originalData, selectedFile])
+
+  const handleBatchToggle = useCallback(() => {
+    if (batchMode) {
+      batchSelectedRef.current = new Set()
+      setBatchSelectedFiles(new Set())
+      setBatchLoadedData({})
+      setBatchPreloadErrors(new Set())
+      batchPreloadPendingRef.current = new Set()
+      batchSessionRef.current += 1
+    }
+    setBatchMode(prev => !prev)
+  }, [batchMode])
+
+  const handleBatchSelectFile = useCallback(async (filePath: string, selected: boolean) => {
+    const next = new Set(batchSelectedRef.current)
+    if (selected) next.add(filePath)
+    else next.delete(filePath)
+    batchSelectedRef.current = next
+    setBatchSelectedFiles(next)
+
+    if (selected) {
+      // Capture session token before async work
+      const sessionToken = batchSessionRef.current
+      if (batchLoadedDataRef.current[filePath] || batchPreloadPendingRef.current.has(filePath)) return
+
+      batchPreloadPendingRef.current.add(filePath)
+      void (async () => {
+        const snapshotCurrentData = currentData
+        const snapshotCurrentDataPath = currentDataPathRef.current
+        try {
+          let data = snapshotCurrentDataPath === filePath && snapshotCurrentData ? snapshotCurrentData : undefined
+          let loadFailed = false
+
+          if (!data) {
+            let content: string | undefined
+            try {
+              content = await readNfoContent(filePath, fileHandles.current)
+            } catch {
+              content = undefined
+            }
+            if (content === undefined) {
+              loadFailed = true
+            } else if (content === '') {
+              data = emptyNfoData()
+            } else {
+              try {
+                data = parseNfo(content)
+              } catch {
+                loadFailed = true
+              }
+            }
+          }
+
+          if (sessionToken === batchSessionRef.current && batchSelectedRef.current.has(filePath)) {
+            if (loadFailed) {
+              setBatchPreloadErrors(prev => new Set(prev).add(filePath))
+            } else if (data) {
+              setBatchLoadedData(prev => (prev[filePath] ? prev : { ...prev, [filePath]: data }))
+              setBatchPreloadErrors(prev => {
+                if (prev.has(filePath)) {
+                  const next = new Set(prev)
+                  next.delete(filePath)
+                  return next
+                }
+                return prev
+              })
+            }
+          }
+        } finally {
+          batchPreloadPendingRef.current.delete(filePath)
+        }
+      })()
+    } else {
+      // Remove from loaded data and errors when deselecting
+      setBatchLoadedData(prev => {
+        const next = { ...prev }
+        delete next[filePath]
+        return next
+      })
+      setBatchPreloadErrors(prev => {
+        if (prev.has(filePath)) {
+          const next = new Set(prev)
+          next.delete(filePath)
+          return next
+        }
+        return prev
+      })
+    }
+  }, [currentData])
+
+  const filteredFiles = filterText.trim()
+    ? nfoFiles.filter(f =>
+        f.filePath.toLowerCase().includes(filterText.toLowerCase())
+      )
+    : nfoFiles
+
+  const handleBatchSelectAll = useCallback(async () => {
+    const allPaths = filteredFiles.map(file => file.filePath)
+    const loadedSnapshot = batchLoadedDataRef.current
+    batchSelectedRef.current = new Set(allPaths)
+    setBatchSelectedFiles(new Set(allPaths))
+
+    // Prune stale loaded data and errors synchronously
+    setBatchLoadedData(prev => {
+      const next: Record<string, NfoData> = {}
+      for (const path of allPaths) {
+        if (prev[path]) next[path] = prev[path]
+      }
+      return next
+    })
+    setBatchPreloadErrors(prev => {
+      const next = new Set<string>()
+      for (const path of allPaths) {
+        if (prev.has(path)) next.add(path)
+      }
+      return next
+    })
+
+    // Capture session token before async preload
+    const sessionToken = batchSessionRef.current
+
+    // Preload all files
+    for (const filePath of allPaths) {
+      if (loadedSnapshot[filePath] || batchPreloadPendingRef.current.has(filePath)) continue
+
+      batchPreloadPendingRef.current.add(filePath)
+      void (async () => {
+        const snapshotCurrentData = currentData
+        const snapshotCurrentDataPath = currentDataPathRef.current
+        try {
+          let data = snapshotCurrentDataPath === filePath && snapshotCurrentData ? snapshotCurrentData : undefined
+          let loadFailed = false
+
+          if (!data) {
+            let content: string | undefined
+            try {
+              content = await readNfoContent(filePath, fileHandles.current)
+            } catch {
+              content = undefined
+            }
+            if (content === undefined) {
+              loadFailed = true
+            } else if (content === '') {
+              data = emptyNfoData()
+            } else {
+              try {
+                data = parseNfo(content)
+              } catch {
+                loadFailed = true
+              }
+            }
+          }
+
+          if (sessionToken === batchSessionRef.current && batchSelectedRef.current.has(filePath)) {
+            if (loadFailed) {
+              setBatchPreloadErrors(prev => new Set(prev).add(filePath))
+            } else if (data) {
+              setBatchLoadedData(prev => (prev[filePath] ? prev : { ...prev, [filePath]: data }))
+              setBatchPreloadErrors(prev => {
+                if (prev.has(filePath)) {
+                  const next = new Set(prev)
+                  next.delete(filePath)
+                  return next
+                }
+                return prev
+              })
+            }
+          }
+        } finally {
+          batchPreloadPendingRef.current.delete(filePath)
+        }
+      })()
+    }
+  }, [filteredFiles, currentData])
+
+  const handleBatchClear = useCallback(() => {
+    batchSelectedRef.current = new Set()
+    setBatchSelectedFiles(new Set())
+    setBatchLoadedData({})
+    setBatchPreloadErrors(new Set())
+    batchPreloadPendingRef.current = new Set()
+    batchSessionRef.current += 1
+  }, [])
+
+  const handleBatchApply = useCallback(async (ops: BatchActorOps): Promise<ApplyResult[]> => {
+    // Capture state at start for stale reconciliation guard
+    const capturedSelectedPath = selectedFile?.filePath
+    const capturedCurrentData = currentData
+    const capturedCurrentDataPath = currentDataPathRef.current
+    const capturedDirtyFiles = new Set(dirtyFiles)
+
+    setIsSaving(true)
+    const results: ApplyResult[] = []
+
+    try {
+      for (const filePath of batchSelectedFiles) {
+        // Issue 2: Non-active dirty files cannot be safely batch-written
+        // If a file has unsaved changes and is not the current active file,
+        // skip it to avoid data loss or ambiguous state
+        if (capturedDirtyFiles.has(filePath) && filePath !== capturedSelectedPath) {
+          results.push({
+            filePath,
+            success: false,
+            conflicts: [],
+            error: 'File has unsaved changes. Please save or discard changes in the editor before applying batch operations.',
+          })
+          continue
+        }
+
+        let data: NfoData | undefined
+        let parseError: string | undefined
+
+        // Use in-memory data if this is the currently selected file
+        if (filePath === capturedSelectedPath && capturedCurrentDataPath === capturedSelectedPath && capturedCurrentData) {
+          data = capturedCurrentData
+        } else {
+          const content = await readNfoContent(filePath, fileHandles.current)
+          if (content === undefined) {
+            results.push({
+              filePath,
+              success: false,
+              conflicts: [],
+              error: isElectron ? 'Failed to read file' : 'File handle not found',
+            })
+            continue
+          }
+
+          // Use empty data for empty files (align with single-file behavior)
+          if (!content) {
+            data = emptyNfoData()
+          } else {
+            try {
+              data = parseNfo(content)
+            } catch (e) {
+              parseError = e instanceof Error ? e.message : 'Parse error'
+            }
+          }
+        }
+
+        if (!data) {
+          results.push({
+            filePath,
+            success: false,
+            conflicts: [],
+            error: parseError ?? 'Failed to parse NFO',
+          })
+          continue
+        }
+
+        // Apply batch operations
+        const { data: updatedData, conflicts } = applyBatchActorOps(data, ops)
+
+        // Serialize
+        const xml = serializeNfo(updatedData)
+
+        // Write back
+        let writeSuccess = false
+        if (isElectron) {
+          const result = await window.electronAPI!.writeFile(filePath, xml)
+          writeSuccess = result.success
+        } else {
+          const handle = fileHandles.current.get(filePath)
+          if (handle) {
+            try {
+              const writable = await handle.createWritable()
+              await writable.write(xml)
+              await writable.close()
+              writeSuccess = true
+            } catch {
+              writeSuccess = false
+            }
+          }
+        }
+
+        if (writeSuccess) {
+          // Issue 1: Async stale reconciliation guard
+          // Only reconcile in-memory state if the active file hasn't changed
+          // during the async operation
+          const isCapturedActiveFile = filePath === capturedSelectedPath
+          const canReconcileActiveFile =
+            isCapturedActiveFile &&
+            selectedFileRef.current?.filePath === capturedSelectedPath &&
+            currentDataRef.current === capturedCurrentData
+
+          // Keep the disk baseline in sync for the active file, even if the
+          // editor picked up newer unsaved edits while the batch write ran.
+          if (isCapturedActiveFile && selectedFileRef.current?.filePath === capturedSelectedPath) {
+            setOriginalData(updatedData)
+          }
+
+          if (canReconcileActiveFile) {
+            setDirtyFiles(prev => {
+              const next = new Set(prev)
+              next.delete(filePath)
+              return next
+            })
+            setCurrentData(updatedData)
+            currentDataRef.current = updatedData
+            setIsDirty(false)
+          }
+          setBatchLoadedData(prev => (
+            isCapturedActiveFile && !canReconcileActiveFile
+              ? prev
+              : { ...prev, [filePath]: updatedData }
+          ))
+
+          results.push({
+            filePath,
+            success: true,
+            conflicts,
+          })
+        } else {
+          results.push({
+            filePath,
+            success: false,
+            conflicts,
+            error: 'Failed to write file',
+          })
+        }
+      }
+    } finally {
+      setIsSaving(false)
+    }
+
+    return results
+  }, [batchSelectedFiles, selectedFile, currentData, dirtyFiles])
 
   // Fetch app version on mount
   useEffect(() => {
@@ -250,12 +681,6 @@ export default function App() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave])
-
-  const filteredFiles = filterText.trim()
-    ? nfoFiles.filter(f =>
-        f.filePath.toLowerCase().includes(filterText.toLowerCase())
-      )
-    : nfoFiles
 
   const saveActive = isDirty && !!selectedFile
 
@@ -287,8 +712,14 @@ export default function App() {
           onFilterChange={setFilterText}
           onSelectFile={handleSelectFile}
           onOpenFolder={handleOpenFolder}
-          folderPath={folderPath}
           appVersion={appVersion}
+          batchMode={batchMode}
+          batchSelectedFiles={batchSelectedFiles}
+          isBatchWriting={isSaving}
+          onBatchToggle={handleBatchToggle}
+          onBatchSelectFile={handleBatchSelectFile}
+          onBatchSelectAll={handleBatchSelectAll}
+          onBatchClear={handleBatchClear}
         />
 
         {/* RIGHT PANEL */}
@@ -319,6 +750,7 @@ export default function App() {
               {isDirty && (
                 <Button
                   onClick={handleDiscard}
+                  disabled={isSaving}
                   className="no-drag font-title gap-1.5"
                   style={{
                     background: 'transparent',
@@ -369,7 +801,16 @@ export default function App() {
 
           {/* Editor content */}
           <div className="flex-1 overflow-hidden">
-            {currentData ? (
+            {batchMode && batchSelectedFiles.size > 0 ? (
+              <BatchEditor
+                key={Array.from(batchSelectedFiles).sort().join('|')}
+                selectedFiles={nfoFiles.filter(f => batchSelectedFiles.has(f.filePath))}
+                loadedData={batchLoadedData}
+                preloadErrors={batchPreloadErrors}
+                isSaving={isSaving}
+                onApply={handleBatchApply}
+              />
+            ) : currentData ? (
               <MetadataEditor data={currentData} onChange={handleDataChange} />
             ) : (
               <div
