@@ -84,6 +84,11 @@ export default function App() {
   // Browser-only: file handle map for File System Access API
   const fileHandles = useRef<FileHandleMap>(new Map())
   const isPickerOpen = useRef(false)
+  const selectedFileRef = useRef<NfoFile | null>(null)
+
+  useEffect(() => {
+    selectedFileRef.current = selectedFile
+  }, [selectedFile])
 
   const handleOpenFolder = useCallback(async () => {
     if (isPickerOpen.current) return
@@ -123,6 +128,7 @@ export default function App() {
         }
       }
       setSelectedFile(null)
+      selectedFileRef.current = null
       setCurrentData(null)
       setIsDirty(false)
       setDirtyFiles(new Set())
@@ -138,6 +144,7 @@ export default function App() {
 
   const handleSelectFile = useCallback(async (file: NfoFile) => {
     setSelectedFile(file)
+    selectedFileRef.current = file
     setSaveStatus('idle')
 
     let content: string | undefined
@@ -376,7 +383,7 @@ export default function App() {
           // Only reconcile in-memory state if the active file hasn't changed
           // during the async operation
           if (filePath === capturedSelectedPath && 
-              selectedFile?.filePath === capturedSelectedPath) {
+              selectedFileRef.current?.filePath === capturedSelectedPath) {
             setCurrentData(updatedData)
             setOriginalData(updatedData)
             setIsDirty(false)
