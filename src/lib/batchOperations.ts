@@ -1,5 +1,7 @@
 import type { Actor, NfoData } from './nfoParser'
 
+export const PRESERVE_ROLES_SENTINEL = '\u200B' // zero-width space
+
 export interface BatchActorOps {
   adds: Actor[]
   removals: string[]
@@ -125,9 +127,6 @@ export function applyBatchActorOps(
   }))
 
   for (const [originalName, update] of Object.entries(ops.edits)) {
-    const index = next.actors.findIndex(actor => actor.name === originalName)
-    if (index === -1) continue
-
     const targetName = update.name
     const nameTaken = targetName !== originalName && next.actors.some(actor => actor.name === targetName)
     if (nameTaken) {
@@ -135,12 +134,19 @@ export function applyBatchActorOps(
       continue
     }
 
-    const current = next.actors[index]
-    next.actors[index] = {
-      ...current,
-      name: targetName,
-      ...(update.role !== undefined && { role: update.role }),
-    }
+    // Edit ALL matching actors with the same name
+    let foundAny = false
+    next.actors = next.actors.map(actor => {
+      if (actor.name !== originalName) return actor
+      foundAny = true
+      return {
+        ...actor,
+        name: targetName,
+        ...(update.role !== undefined && { role: update.role }),
+      }
+    })
+    
+    if (!foundAny) continue
   }
 
   for (const add of ops.adds) {

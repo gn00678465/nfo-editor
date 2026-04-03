@@ -248,4 +248,34 @@ describe('applyBatchActorOps', () => {
 
     expect(JSON.stringify(data)).toBe(original)
   })
+
+  it('edits all duplicate actors with the same name in a single file', () => {
+    const data = makeNfoData([
+      { name: 'Alice', role: 'Lead' },
+      { name: 'Bob', role: 'Support' },
+      { name: 'Alice', role: 'Cameo' },
+    ])
+    const ops = { adds: [], removals: [], edits: { Alice: { name: 'Alicia', role: 'Star' } } }
+
+    const { data: result } = applyBatchActorOps(data, ops)
+
+    expect(result.actors).toHaveLength(3)
+    expect(result.actors[0]).toMatchObject({ name: 'Alicia', role: 'Star' })
+    expect(result.actors[1]).toMatchObject({ name: 'Bob', role: 'Support' })
+    expect(result.actors[2]).toMatchObject({ name: 'Alicia', role: 'Star' })
+  })
+
+  it('edits all duplicate actors when only changing name', () => {
+    const data = makeNfoData([
+      { name: 'Alice', role: 'Lead' },
+      { name: 'Alice', role: 'Support' },
+    ])
+    const ops = { adds: [], removals: [], edits: { Alice: { name: 'Alicia' } } }
+
+    const { data: result } = applyBatchActorOps(data, ops)
+
+    expect(result.actors).toHaveLength(2)
+    expect(result.actors[0]).toMatchObject({ name: 'Alicia', role: 'Lead' })
+    expect(result.actors[1]).toMatchObject({ name: 'Alicia', role: 'Support' })
+  })
 })

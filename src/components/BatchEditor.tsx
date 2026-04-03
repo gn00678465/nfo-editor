@@ -3,6 +3,7 @@ import type { NfoFile } from '../App'
 import type { Actor, NfoData } from '../lib/nfoParser'
 import {
   diffActors,
+  PRESERVE_ROLES_SENTINEL,
   type BatchActorOps,
   type ActorDiff,
   type ApplyResult,
@@ -131,8 +132,15 @@ function ActorRow({
             <div>
               <label style={labelSm}>Role</label>
               <input
-                style={inputSm}
-                value={editDraft.role}
+                style={{
+                  ...inputSm,
+                  ...(editDraft.role === PRESERVE_ROLES_SENTINEL && {
+                    fontStyle: 'italic',
+                    color: 'var(--text-muted)',
+                  }),
+                }}
+                value={editDraft.role === PRESERVE_ROLES_SENTINEL ? '' : editDraft.role}
+                placeholder={editDraft.role === PRESERVE_ROLES_SENTINEL ? '(preserve existing roles)' : undefined}
                 onChange={e => onEditDraftChange({ ...editDraft, role: e.target.value })}
                 onKeyDown={e => {
                   if (e.key === 'Enter') onCommitEdit()
@@ -348,9 +356,14 @@ export default function BatchEditor({
   const startEdit = useCallback((diff: ActorDiff) => {
     const existing = ops.edits[diff.actor.name]
     setEditingActor(diff.actor.name)
+    
+    // For mixed-role entries, start with sentinel meaning "preserve existing roles"
+    // For uniform entries, start with the actual role
+    const initialRole = existing?.role ?? (diff.rolesDiffer ? PRESERVE_ROLES_SENTINEL : (diff.actor.role ?? ''))
+    
     setEditDraft({
       name: existing?.name ?? diff.actor.name,
-      role: existing?.role ?? diff.actor.role ?? '',
+      role: initialRole,
     })
   }, [ops.edits])
 
@@ -359,12 +372,12 @@ export default function BatchEditor({
     if (!name) return
     const diff = actorDiffs.find(d => d.actor.name === originalName)
     
-    // Determine if role was intentionally changed
-    const originalRole = diff?.actor.role ?? ''
-    const roleChanged = editDraft.role !== originalRole
-    const rolePreserved = diff?.rolesDiffer && !roleChanged
+    // Detect if role should be preserved or set
+    const roleIsSentinel = editDraft.role === PRESERVE_ROLES_SENTINEL
+    const roleExplicitlySet = !roleIsSentinel
     
-    const unchanged = name === originalName && !roleChanged
+    // Name unchanged and role is sentinel → no-op
+    const unchanged = name === originalName && roleIsSentinel
     
     setOps(prev => {
       const next = { ...prev, edits: { ...prev.edits } }
@@ -373,7 +386,7 @@ export default function BatchEditor({
       } else {
         next.edits[originalName] = {
           name,
-          ...(rolePreserved ? {} : { role: editDraft.role }),
+          ...(roleExplicitlySet && { role: editDraft.role }),
         }
       }
       return next
