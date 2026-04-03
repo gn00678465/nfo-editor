@@ -97,7 +97,8 @@ function ActorRow({
 }: ActorRowProps) {
   const name = diff.actor.name
   const displayName = stagedEdit?.name ?? name
-  const displayRole = stagedEdit?.role ?? diff.actor.role
+  const displayRole = stagedEdit?.role === undefined ? diff.actor.role : stagedEdit.role
+  const roleIsClearing = stagedEdit?.role === ''
 
   return (
     <div
@@ -226,7 +227,7 @@ function ActorRow({
                 </span>
               )}
             </div>
-            {(displayRole || diff.rolesDiffer) && (
+            {(displayRole !== undefined || diff.rolesDiffer || roleIsClearing) && (
               <div
                 style={{
                   fontSize: 11, marginTop: 1,
@@ -234,14 +235,18 @@ function ActorRow({
                     ? 'var(--accent-amber)'
                     : diff.rolesDiffer && stagedEdit && stagedEdit.role === undefined
                     ? 'var(--text-muted)'
+                    : roleIsClearing
+                    ? 'var(--text-muted)'
                     : 'var(--text-secondary)',
-                  fontStyle: diff.rolesDiffer && (!stagedEdit || stagedEdit.role === undefined) ? 'italic' : 'normal',
+                  fontStyle: diff.rolesDiffer && (!stagedEdit || stagedEdit.role === undefined) || roleIsClearing ? 'italic' : 'normal',
                 }}
               >
                 {diff.rolesDiffer && !stagedEdit
                   ? 'role varies across files'
                   : diff.rolesDiffer && stagedEdit && stagedEdit.role === undefined
                   ? 'preserving existing roles'
+                  : roleIsClearing
+                  ? '(clearing role)'
                   : displayRole}
               </div>
             )}
