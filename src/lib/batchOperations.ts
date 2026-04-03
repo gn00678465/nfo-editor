@@ -139,66 +139,100 @@ export function applyBatchActorOps(
     order: index,
   }))
 
-  // Build final-mapping-based conflict detection:
-  // After removals, determine distinct source actor-name groups present in this file.
-  // For each source group, compute its final target name.
-  // If two or more distinct source groups map to the same final name → conflict.
+  // Fixpoint-based rename conflict detection:
+  // Work per file, after removals. Treat each distinct present actor name as a source group.
   
   // Get all distinct actor names present in the file after removals
   const presentActorNames = new Set(next.actors.map(a => a.name))
   
-  // Build source-group → final-name mapping
-  // A source group is a distinct actor name currently in the file
-  const sourceGroupToFinalName = new Map<string, string>()
+  // Split edits into name-preserving (same-name) and changed-name renames
+  const changedNameRenames = new Map<string, string>() // source -> target
+  const sameNameEdits = new Map<string, { name: string; role?: string }>() // source -> edit
   
   for (const actorName of presentActorNames) {
-    // Check if there's an edit for this source group
     const edit = ops.edits[actorName]
-    if (edit && edit.name.trim() !== actorName) {
-      // This source group will be renamed to edit.name
-      sourceGroupToFinalName.set(actorName, edit.name.trim())
+    if (!edit) continue
+    
+    const targetName = edit.name.trim()
+    if (targetName === actorName) {
+      // Same-name edit (role-only or no-op) - these never vacate names
+      sameNameEdits.set(actorName, edit)
     } else {
-      // No edit or self-rename → final name is the original name
-      sourceGroupToFinalName.set(actorName, actorName)
+      // Changed-name rename - these are candidates for acceptance
+      changedNameRenames.set(actorName, targetName)
     }
   }
   
-  // Validate the final mapping: check if any final name appears more than once
-  const finalNameToSourceGroups = new Map<string, string[]>()
-  for (const [sourceGroup, finalName] of sourceGroupToFinalName.entries()) {
-    if (!finalNameToSourceGroups.has(finalName)) {
-      finalNameToSourceGroups.set(finalName, [])
-    }
-    finalNameToSourceGroups.get(finalName)!.push(sourceGroup)
-  }
+  // Fixpoint iteration: start by assuming all changed-name renames are accepted
+  let acceptedRenames = new Set(changedNameRenames.keys())
+  let changed = true
   
-  // Detect conflicts: any final name with multiple source groups is a conflict
-  const conflictingEdits = new Set<string>()
-  for (const [finalName, sourceGroups] of finalNameToSourceGroups.entries()) {
-    if (sourceGroups.length > 1) {
-      // Multiple source groups map to the same final name → conflict
-      // Mark all source groups that have edits (non-identity mappings) as conflicting
-      for (const sourceGroup of sourceGroups) {
-        if (sourceGroupToFinalName.get(sourceGroup) !== sourceGroup) {
-          conflictingEdits.add(sourceGroup)
-        }
+  while (changed) {
+    changed = false
+    
+    // Compute final names under current accepted set
+    const finalNames = new Map<string, string>() // source -> final name
+    for (const sourceName of presentActorNames) {
+      if (acceptedRenames.has(sourceName)) {
+        // This source group uses its target name
+        finalNames.set(sourceName, changedNameRenames.get(sourceName)!)
+      } else {
+        // This source group keeps its original name
+        finalNames.set(sourceName, sourceName)
+      }
+    }
+    
+    // Check for duplicate final names
+    const finalNameToSources = new Map<string, string[]>()
+    for (const [source, finalName] of finalNames.entries()) {
+      if (!finalNameToSources.has(finalName)) {
+        finalNameToSources.set(finalName, [])
+      }
+      finalNameToSources.get(finalName)!.push(source)
+    }
+    
+    // Find conflicting final names (produced by 2+ source groups)
+    const conflictingFinalNames = new Set<string>()
+    for (const [finalName, sources] of finalNameToSources.entries()) {
+      if (sources.length > 1) {
+        conflictingFinalNames.add(finalName)
+      }
+    }
+    
+    // Remove all accepted changed-name renames that target a conflicting final name
+    for (const source of acceptedRenames) {
+      const targetName = changedNameRenames.get(source)!
+      if (conflictingFinalNames.has(targetName)) {
+        acceptedRenames.delete(source)
+        changed = true
       }
     }
   }
   
-  // Build a map of original actor identity -> new name/role for atomic application
-  // We track actors by their original identity (name at start) to avoid cascading renames
-  const actorUpdates = new Map<string, { name: string; role?: string }>()
-  for (const [originalName, update] of Object.entries(ops.edits)) {
-    if (!conflictingEdits.has(originalName)) {
-      actorUpdates.set(originalName, update)
-    } else {
-      conflicts.push(originalName)
+  // Report rejected renames as conflicts
+  for (const [source, _target] of changedNameRenames.entries()) {
+    if (!acceptedRenames.has(source)) {
+      conflicts.push(source)
     }
   }
   
-  // Apply all non-conflicting edits atomically
-  // Each actor is updated based on its original name, preventing cascading renames
+  // Build update map: accepted changed-name renames + same-name edits
+  const actorUpdates = new Map<string, { name: string; role?: string }>()
+  
+  for (const source of acceptedRenames) {
+    const targetName = changedNameRenames.get(source)!
+    const originalEdit = ops.edits[source]
+    actorUpdates.set(source, {
+      name: targetName,
+      ...(originalEdit.role !== undefined && { role: originalEdit.role }),
+    })
+  }
+  
+  for (const [source, edit] of sameNameEdits.entries()) {
+    actorUpdates.set(source, edit)
+  }
+  
+  // Apply all accepted edits atomically
   next.actors = next.actors.map(actor => {
     const update = actorUpdates.get(actor.name)
     if (!update) return actor

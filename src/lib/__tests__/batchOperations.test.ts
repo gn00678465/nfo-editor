@@ -464,10 +464,12 @@ describe('applyBatchActorOps', () => {
       expect(result.actors[2]).toMatchObject({ name: 'Carol', role: 'Cameo' })
     })
 
-    it('detects chain conflict: A->B, B->C, C unchanged creates duplicate final name C', () => {
-      // Source groups: A, B, C
-      // Final names: A→B, B→C, C→C
-      // Both B and C end up at final name C → conflict for B (the edit)
+    it('detects chain conflict: A->B, B->C, C unchanged - both A and B conflict', () => {
+      // Fixpoint cascade:
+      // 1. Start: accept A→B, B→C. Final: A→B, B→C, C→C (B,C duplicate at C)
+      // 2. Reject B→C. Final: A→B, B→B, C→C (A,B duplicate at B)
+      // 3. Reject A→B. Final: A→A, B→B, C→C (stable)
+      // Both A and B are conflicts, no duplicate final names
       const data = makeNfoData([
         { name: 'A', role: 'Lead' },
         { name: 'B', role: 'Support' },
@@ -478,16 +480,16 @@ describe('applyBatchActorOps', () => {
         removals: [],
         edits: {
           A: { name: 'B' },
-          B: { name: 'C' }, // Conflicts because C is unchanged and also maps to C
+          B: { name: 'C' },
         },
       }
 
       const { data: result, conflicts } = applyBatchActorOps(data, ops)
 
-      // B conflicts because both B and C map to final name C
+      expect(conflicts).toContain('A')
       expect(conflicts).toContain('B')
-      expect(result.actors[0]).toMatchObject({ name: 'B', role: 'Lead' }) // A→B succeeds
-      expect(result.actors[1]).toMatchObject({ name: 'B', role: 'Support' }) // B unchanged due to conflict
+      expect(result.actors[0]).toMatchObject({ name: 'A', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'B', role: 'Support' })
       expect(result.actors[2]).toMatchObject({ name: 'C', role: 'Cameo' })
     })
 
@@ -514,10 +516,13 @@ describe('applyBatchActorOps', () => {
       expect(result.actors[1]).toMatchObject({ name: 'A', role: 'Support' })
     })
 
-    it('detects longer chain conflict: A->B, B->C, C->D, D unchanged', () => {
-      // Source groups: A, B, C, D
-      // Final names: A→B, B→C, C→D, D→D
-      // Both C and D end up at D → conflict for C
+    it('detects longer chain conflict: A->B, B->C, C->D, D unchanged - cascades fully', () => {
+      // Fixpoint cascade:
+      // 1. Start: accept all. Final: A→B, B→C, C→D, D→D (C,D duplicate at D)
+      // 2. Reject C→D. Final: A→B, B→C, C→C, D→D (B,C duplicate at C)
+      // 3. Reject B→C. Final: A→B, B→B, C→C, D→D (A,B duplicate at B)
+      // 4. Reject A→B. Final: A→A, B→B, C→C, D→D (stable)
+      // All three renames (A, B, C) conflict
       const data = makeNfoData([
         { name: 'A', role: 'Lead' },
         { name: 'B', role: 'Support' },
@@ -530,16 +535,18 @@ describe('applyBatchActorOps', () => {
         edits: {
           A: { name: 'B' },
           B: { name: 'C' },
-          C: { name: 'D' }, // Conflicts because D is unchanged
+          C: { name: 'D' },
         },
       }
 
       const { data: result, conflicts } = applyBatchActorOps(data, ops)
 
+      expect(conflicts).toContain('A')
+      expect(conflicts).toContain('B')
       expect(conflicts).toContain('C')
-      expect(result.actors[0]).toMatchObject({ name: 'B', role: 'Lead' }) // A→B succeeds
-      expect(result.actors[1]).toMatchObject({ name: 'C', role: 'Support' }) // B→C succeeds
-      expect(result.actors[2]).toMatchObject({ name: 'C', role: 'Cameo' }) // C unchanged due to conflict
+      expect(result.actors[0]).toMatchObject({ name: 'A', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'B', role: 'Support' })
+      expect(result.actors[2]).toMatchObject({ name: 'C', role: 'Cameo' })
       expect(result.actors[3]).toMatchObject({ name: 'D', role: 'Extra' })
     })
   })
