@@ -699,6 +699,7 @@ export default function App() {
               {isDirty && (
                 <Button
                   onClick={handleDiscard}
+                  disabled={isSaving}
                   className="no-drag font-title gap-1.5"
                   style={{
                     background: 'transparent',
@@ -751,6 +752,7 @@ export default function App() {
           <div className="flex-1 overflow-hidden">
             {batchMode && batchSelectedFiles.size > 0 ? (
               <BatchEditor
+                key={Array.from(batchSelectedFiles).sort().join('|')}
                 selectedFiles={nfoFiles.filter(f => batchSelectedFiles.has(f.filePath))}
                 loadedData={batchLoadedData}
                 isSaving={isSaving}

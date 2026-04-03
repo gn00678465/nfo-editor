@@ -154,13 +154,15 @@ export default function FileList({
               <button
                 type="button"
                 onClick={onBatchSelectAll}
+                disabled={isBatchWriting}
                 style={{
                   color: 'var(--accent-indigo)',
-                  cursor: 'pointer',
+                  cursor: isBatchWriting ? 'not-allowed' : 'pointer',
                   background: 'transparent',
                   border: 'none',
                   padding: 0,
                   font: 'inherit',
+                  opacity: isBatchWriting ? 0.5 : 1,
                 }}
               >
                 All
@@ -169,13 +171,15 @@ export default function FileList({
               <button
                 type="button"
                 onClick={onBatchClear}
+                disabled={isBatchWriting}
                 style={{
                   color: 'var(--accent-indigo)',
-                  cursor: 'pointer',
+                  cursor: isBatchWriting ? 'not-allowed' : 'pointer',
                   background: 'transparent',
                   border: 'none',
                   padding: 0,
                   font: 'inherit',
+                  opacity: isBatchWriting ? 0.5 : 1,
                 }}
               >
                 Clear
@@ -222,9 +226,10 @@ export default function FileList({
               key={file.filePath}
               type="button"
               onClick={() => {
-                if (batchMode) onBatchSelectFile(file.filePath, !isBatchSelected)
-                else onSelectFile(file)
+                if (batchMode && !isBatchWriting) onBatchSelectFile(file.filePath, !isBatchSelected)
+                else if (!batchMode) onSelectFile(file)
               }}
+              disabled={batchMode && isBatchWriting}
               style={{
                 width: '100%',
                 textAlign: 'left',
@@ -240,13 +245,13 @@ export default function FileList({
                 borderTop: 'none',
                 borderRight: 'none',
                 borderBottom: '1px solid var(--border-subtle)',
-                cursor: 'pointer',
+                cursor: (batchMode && isBatchWriting) ? 'not-allowed' : 'pointer',
                 position: 'relative',
                 transition: 'background 100ms',
-                opacity: 1,
+                opacity: (batchMode && isBatchWriting) ? 0.6 : 1,
               }}
               onMouseEnter={e => {
-                if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'
+                if (!isActive && !(batchMode && isBatchWriting)) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'
               }}
               onMouseLeave={e => {
                 if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
