@@ -80,7 +80,6 @@ export default function App() {
   // Batch edit state
   const [batchMode, setBatchMode] = useState(false)
   const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
-  const [isBatchWriting, setIsBatchWriting] = useState(false)
 
   // Browser-only: file handle map for File System Access API
   const fileHandles = useRef<FileHandleMap>(new Map())
@@ -266,7 +265,7 @@ export default function App() {
   }, [])
 
   const handleBatchApply = useCallback(async (ops: BatchActorOps): Promise<ApplyResult[]> => {
-    setIsBatchWriting(true)
+    setIsSaving(true)
     const results: ApplyResult[] = []
 
     try {
@@ -307,20 +306,15 @@ export default function App() {
             content = await fileObj.text()
           }
 
+          // Use empty data for empty files (align with single-file behavior)
           if (!content) {
-            results.push({
-              filePath,
-              success: false,
-              conflicts: [],
-              error: 'Empty file content',
-            })
-            continue
-          }
-
-          try {
-            data = parseNfo(content)
-          } catch (e) {
-            parseError = e instanceof Error ? e.message : 'Parse error'
+            data = emptyNfoData()
+          } else {
+            try {
+              data = parseNfo(content)
+            } catch (e) {
+              parseError = e instanceof Error ? e.message : 'Parse error'
+            }
           }
         }
 
@@ -370,14 +364,9 @@ export default function App() {
               next.delete(filePath)
               return next
             })
-          } else {
-            // Clear dirty flag for non-active files
-            setDirtyFiles(prev => {
-              const next = new Set(prev)
-              next.delete(filePath)
-              return next
-            })
           }
+          // Note: Do NOT clear dirtyFiles for non-active files.
+          // They may have unsaved in-memory drafts we cannot reconcile here.
 
           results.push({
             filePath,
@@ -394,7 +383,7 @@ export default function App() {
         }
       }
     } finally {
-      setIsBatchWriting(false)
+      setIsSaving(false)
     }
 
     return results
@@ -456,7 +445,7 @@ export default function App() {
           appVersion={appVersion}
           batchMode={batchMode}
           batchSelectedFiles={batchSelectedFiles}
-          isBatchWriting={isBatchWriting}
+          isBatchWriting={isSaving}
           onBatchToggle={handleBatchToggle}
           onBatchSelectFile={handleBatchSelectFile}
           onBatchSelectAll={handleBatchSelectAll}
@@ -545,7 +534,7 @@ export default function App() {
               <BatchEditor
                 selectedFiles={nfoFiles.filter(f => batchSelectedFiles.has(f.filePath))}
                 loadedData={{}}
-                isSaving={isBatchWriting}
+                isSaving={isSaving}
                 onApply={handleBatchApply}
               />
             ) : currentData ? (
