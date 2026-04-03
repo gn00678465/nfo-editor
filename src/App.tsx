@@ -80,6 +80,7 @@ export default function App() {
   // Batch edit state
   const [batchMode, setBatchMode] = useState(false)
   const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
+  const [batchLoadedData, setBatchLoadedData] = useState<Record<string, NfoData>>({})
 
   // Browser-only: file handle map for File System Access API
   const fileHandles = useRef<FileHandleMap>(new Map())
@@ -137,6 +138,7 @@ export default function App() {
       // Reset batch state when opening a new folder
       setBatchMode(false)
       setBatchSelectedFiles(new Set())
+      setBatchLoadedData({})
     } finally {
       isPickerOpen.current = false
     }
@@ -243,19 +245,76 @@ export default function App() {
   const handleBatchToggle = useCallback(() => {
     setBatchMode(prev => {
       const next = !prev
-      if (!next) setBatchSelectedFiles(new Set())
+      if (!next) {
+        setBatchSelectedFiles(new Set())
+        setBatchLoadedData({})
+      }
       return next
     })
   }, [])
 
-  const handleBatchSelectFile = useCallback((filePath: string, selected: boolean) => {
+  const handleBatchSelectFile = useCallback(async (filePath: string, selected: boolean) => {
     setBatchSelectedFiles(prev => {
       const next = new Set(prev)
       if (selected) next.add(filePath)
       else next.delete(filePath)
       return next
     })
-  }, [])
+
+    if (selected) {
+      // Load file data if not already loaded
+      setBatchLoadedData(prev => {
+        if (prev[filePath]) return prev // Already loaded
+
+        // Load asynchronously
+        ;(async () => {
+          let data: NfoData | undefined
+
+          // Use in-memory data if this is the currently selected file
+          if (filePath === selectedFile?.filePath && currentData) {
+            data = currentData
+          } else {
+            // Read from disk/browser handle
+            let content: string | undefined
+            if (isElectron) {
+              const result = await window.electronAPI!.readFile(filePath)
+              if (result.success) content = result.content
+            } else {
+              const handle = fileHandles.current.get(filePath)
+              if (handle) {
+                const fileObj = await handle.getFile()
+                content = await fileObj.text()
+              }
+            }
+
+            // Use empty data for empty files
+            if (!content) {
+              data = emptyNfoData()
+            } else {
+              try {
+                data = parseNfo(content)
+              } catch {
+                data = emptyNfoData()
+              }
+            }
+          }
+
+          if (data) {
+            setBatchLoadedData(prev => ({ ...prev, [filePath]: data }))
+          }
+        })()
+
+        return prev
+      })
+    } else {
+      // Remove from loaded data when deselecting
+      setBatchLoadedData(prev => {
+        const next = { ...prev }
+        delete next[filePath]
+        return next
+      })
+    }
+  }, [selectedFile, currentData])
 
   const filteredFiles = filterText.trim()
     ? nfoFiles.filter(f =>
@@ -263,9 +322,58 @@ export default function App() {
       )
     : nfoFiles
 
-  const handleBatchSelectAll = useCallback(() => {
-    setBatchSelectedFiles(new Set(filteredFiles.map(file => file.filePath)))
-  }, [filteredFiles])
+  const handleBatchSelectAll = useCallback(async () => {
+    const allPaths = filteredFiles.map(file => file.filePath)
+    setBatchSelectedFiles(new Set(allPaths))
+
+    // Preload all files
+    for (const filePath of allPaths) {
+      // Skip if already loaded
+      setBatchLoadedData(prev => {
+        if (prev[filePath]) return prev
+
+        // Load asynchronously
+        ;(async () => {
+          let data: NfoData | undefined
+
+          // Use in-memory data if this is the currently selected file
+          if (filePath === selectedFile?.filePath && currentData) {
+            data = currentData
+          } else {
+            // Read from disk/browser handle
+            let content: string | undefined
+            if (isElectron) {
+              const result = await window.electronAPI!.readFile(filePath)
+              if (result.success) content = result.content
+            } else {
+              const handle = fileHandles.current.get(filePath)
+              if (handle) {
+                const fileObj = await handle.getFile()
+                content = await fileObj.text()
+              }
+            }
+
+            // Use empty data for empty files
+            if (!content) {
+              data = emptyNfoData()
+            } else {
+              try {
+                data = parseNfo(content)
+              } catch {
+                data = emptyNfoData()
+              }
+            }
+          }
+
+          if (data) {
+            setBatchLoadedData(prev => ({ ...prev, [filePath]: data }))
+          }
+        })()
+
+        return prev
+      })
+    }
+  }, [filteredFiles, selectedFile, currentData])
 
   const handleBatchClear = useCallback(() => {
     setBatchSelectedFiles(new Set())
@@ -561,7 +669,7 @@ export default function App() {
             {batchMode && batchSelectedFiles.size > 0 ? (
               <BatchEditor
                 selectedFiles={nfoFiles.filter(f => batchSelectedFiles.has(f.filePath))}
-                loadedData={{}}
+                loadedData={batchLoadedData}
                 isSaving={isSaving}
                 onApply={handleBatchApply}
               />
