@@ -377,6 +377,11 @@ export default function BatchEditor({
 
   const actorDiffs = useMemo(() => diffActors(loadedData), [loadedData])
   const totalFiles = selectedFiles.length
+  const loadedCount = useMemo(
+    () => selectedFiles.reduce((count, file) => count + (loadedData[file.filePath] ? 1 : 0), 0),
+    [selectedFiles, loadedData],
+  )
+  const allLoaded = loadedCount === totalFiles
 
   const inAllFiles = useMemo(
     () => actorDiffs.filter(d => d.fileCount === d.totalFiles),
@@ -725,10 +730,15 @@ export default function BatchEditor({
 
         {/* Sticky apply footer */}
         <div style={stickyFooter}>
+          {!allLoaded && (
+            <div style={{ marginRight: 'auto', alignSelf: 'center', fontSize: 11, color: 'var(--text-muted)' }}>
+              Loading {loadedCount} / {totalFiles} files…
+            </div>
+          )}
           <button
             onClick={() => setView('confirm')}
-            disabled={!hasOps || isSaving}
-            style={primaryBtn(hasOps, isSaving)}
+            disabled={!hasOps || isSaving || !allLoaded}
+            style={primaryBtn(hasOps && allLoaded, isSaving)}
           >
             {hasOps && (
               <span
