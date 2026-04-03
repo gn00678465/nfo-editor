@@ -100,6 +100,7 @@ export default function App() {
   const isPickerOpen = useRef(false)
   const selectedFileRef = useRef<NfoFile | null>(null)
   const currentDataPathRef = useRef<string | null>(null)
+  const currentDataRef = useRef<NfoData | null>(null)
   const batchLoadedDataRef = useRef<Record<string, NfoData>>({})
   // Batch session token: incremented on any action that invalidates pending preloads
   const batchSessionRef = useRef(0)
@@ -117,9 +118,15 @@ export default function App() {
     selectedFileRef.current = selectedFile
   }, [selectedFile])
 
+  useEffect(() => {
+    currentDataRef.current = currentData
+  }, [currentData])
+
   const handleOpenFolder = useCallback(async () => {
     if (isPickerOpen.current) return
     isPickerOpen.current = true
+    // Issue 2 fix: Invalidate pending file-selection reads
+    latestSelectRequestRef.current += 1
     try {
       if (isElectron) {
         const fp = await window.electronAPI!.openFolder()
@@ -265,8 +272,9 @@ export default function App() {
       }
 
       if (success) {
-        // Issue 2 fix: Only update UI state if the saved file is still active
-        if (selectedFileRef.current?.filePath === savedFilePath) {
+        // Issue 2 fix: Only update UI state if the saved file is still active AND data hasn't changed
+        if (selectedFileRef.current?.filePath === savedFilePath &&
+            currentDataRef.current === savedData) {
           setIsDirty(false)
           setOriginalData(savedData)
           setSaveStatus('saved')
