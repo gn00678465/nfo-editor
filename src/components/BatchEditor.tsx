@@ -232,15 +232,15 @@ function ActorRow({
                   fontSize: 11, marginTop: 1,
                   color: diff.rolesDiffer && !stagedEdit
                     ? 'var(--accent-amber)'
-                    : diff.rolesDiffer && stagedEdit && !stagedEdit.role
+                    : diff.rolesDiffer && stagedEdit && stagedEdit.role === undefined
                     ? 'var(--text-muted)'
                     : 'var(--text-secondary)',
-                  fontStyle: diff.rolesDiffer && (!stagedEdit || !stagedEdit.role) ? 'italic' : 'normal',
+                  fontStyle: diff.rolesDiffer && (!stagedEdit || stagedEdit.role === undefined) ? 'italic' : 'normal',
                 }}
               >
                 {diff.rolesDiffer && !stagedEdit
                   ? 'role varies across files'
-                  : diff.rolesDiffer && stagedEdit && !stagedEdit.role
+                  : diff.rolesDiffer && stagedEdit && stagedEdit.role === undefined
                   ? 'preserving existing roles'
                   : displayRole}
               </div>
@@ -432,7 +432,8 @@ export default function BatchEditor({
     // Determine if this is a no-op
     const nameUnchanged = name === originalName
     const preservingRoles = roleMode === 'preserve'
-    const unchanged = nameUnchanged && preservingRoles
+    const roleUnchanged = editDraft.role === (diff.actor.role ?? '')
+    const unchanged = nameUnchanged && (preservingRoles || roleUnchanged)
     
     setOps(prev => {
       const next = { ...prev, edits: { ...prev.edits } }
@@ -838,7 +839,8 @@ export default function BatchEditor({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {Object.entries(ops.edits).map(([original, update]) => {
                   const diff = actorDiffs.find(d => d.actor.name === original)
-                  const preservingRoles = !update.role && diff?.rolesDiffer
+                  const preservingRoles = update.role === undefined && diff?.rolesDiffer
+                  const normalizingToEmpty = update.role === ''
                   return (
                     <div
                       key={original}
@@ -855,8 +857,12 @@ export default function BatchEditor({
                       <span style={{ fontSize: 12, color: 'var(--accent-indigo)', fontWeight: 500 }}>
                         {update.name}
                       </span>
-                      {update.role ? (
+                      {update.role !== undefined && update.role !== '' ? (
                         <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{update.role}</span>
+                      ) : normalizingToEmpty ? (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          (clearing role)
+                        </span>
                       ) : preservingRoles ? (
                         <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
                           (preserving existing roles)
