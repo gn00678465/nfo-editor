@@ -95,10 +95,6 @@ export default function App() {
     selectedFileRef.current = selectedFile
   }, [selectedFile])
 
-  useEffect(() => {
-    batchSelectedRef.current = batchSelectedFiles
-  }, [batchSelectedFiles])
-
   const handleOpenFolder = useCallback(async () => {
     if (isPickerOpen.current) return
     isPickerOpen.current = true
@@ -145,6 +141,7 @@ export default function App() {
       setSaveStatus('idle')
       // Reset batch state when opening a new folder
       setBatchMode(false)
+      batchSelectedRef.current = new Set()
       setBatchSelectedFiles(new Set())
       setBatchLoadedData({})
       batchSessionRef.current += 1
@@ -252,24 +249,21 @@ export default function App() {
   }, [originalData, selectedFile])
 
   const handleBatchToggle = useCallback(() => {
-    setBatchMode(prev => {
-      const next = !prev
-      if (!next) {
-        setBatchSelectedFiles(new Set())
-        setBatchLoadedData({})
-        batchSessionRef.current += 1
-      }
-      return next
-    })
-  }, [])
+    if (batchMode) {
+      batchSelectedRef.current = new Set()
+      setBatchSelectedFiles(new Set())
+      setBatchLoadedData({})
+      batchSessionRef.current += 1
+    }
+    setBatchMode(prev => !prev)
+  }, [batchMode])
 
   const handleBatchSelectFile = useCallback(async (filePath: string, selected: boolean) => {
-    setBatchSelectedFiles(prev => {
-      const next = new Set(prev)
-      if (selected) next.add(filePath)
-      else next.delete(filePath)
-      return next
-    })
+    const next = new Set(batchSelectedRef.current)
+    if (selected) next.add(filePath)
+    else next.delete(filePath)
+    batchSelectedRef.current = next
+    setBatchSelectedFiles(next)
 
     if (selected) {
       // Capture session token before async work
@@ -340,6 +334,7 @@ export default function App() {
 
   const handleBatchSelectAll = useCallback(async () => {
     const allPaths = filteredFiles.map(file => file.filePath)
+    batchSelectedRef.current = new Set(allPaths)
     setBatchSelectedFiles(new Set(allPaths))
 
     // Prune stale loaded data synchronously
@@ -407,6 +402,7 @@ export default function App() {
   }, [filteredFiles, selectedFile, currentData])
 
   const handleBatchClear = useCallback(() => {
+    batchSelectedRef.current = new Set()
     setBatchSelectedFiles(new Set())
     setBatchLoadedData({})
     batchSessionRef.current += 1
