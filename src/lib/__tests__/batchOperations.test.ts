@@ -394,6 +394,53 @@ describe('applyBatchActorOps', () => {
       expect(result.actors[2]).toMatchObject({ name: 'Carol', role: 'Cameo' })
       expect(result.actors[3]).toMatchObject({ name: 'Dave', role: 'Extra' })
     })
+
+    it('rejects many-to-one collision to brand-new name', () => {
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Bob', role: 'Support' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Zoe' }, // Both trying to rename to Zoe (new name)
+          Bob: { name: 'Zoe' },
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toContain('Alice')
+      expect(conflicts).toContain('Bob')
+      expect(result.actors[0]).toMatchObject({ name: 'Alice', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'Bob', role: 'Support' })
+    })
+
+    it('rejects many-to-one collision to name being renamed away', () => {
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Bob', role: 'Support' },
+        { name: 'Carol', role: 'Cameo' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Bob' },  // Multiple sources targeting Bob
+          Carol: { name: 'Bob' },  // Bob is also being renamed to Dave
+          Bob: { name: 'Dave' },   // This should not make Bob available as a target
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toContain('Alice')
+      expect(conflicts).toContain('Carol')
+      expect(result.actors[0]).toMatchObject({ name: 'Alice', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'Dave', role: 'Support' }) // Bob → Dave succeeds
+      expect(result.actors[2]).toMatchObject({ name: 'Carol', role: 'Cameo' })
+    })
   })
 })
 

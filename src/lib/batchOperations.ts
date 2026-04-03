@@ -145,18 +145,40 @@ export function applyBatchActorOps(
   // Build mapping of source -> target for all edits
   const editSources = new Set(Object.keys(ops.edits))
   
-  // Detect conflicts: an edit conflicts if its target name would collide
-  // with a name that exists in the final state but is NOT being renamed away
-  const conflictingEdits = new Set<string>()
+  // Count how many sources target each destination name
+  const targetCounts = new Map<string, string[]>()
   for (const [originalName, update] of Object.entries(ops.edits)) {
     const targetName = update.name
+    if (targetName === originalName) continue // Skip self-renames
     
-    // No conflict if renaming to self
+    if (!targetCounts.has(targetName)) {
+      targetCounts.set(targetName, [])
+    }
+    targetCounts.get(targetName)!.push(originalName)
+  }
+  
+  // Detect conflicts: an edit conflicts if:
+  // 1. Its target name exists and is NOT being renamed away (would collide with existing)
+  // 2. Multiple sources target the same destination (many-to-one collision)
+  const conflictingEdits = new Set<string>()
+  
+  // Check for collisions with existing names
+  for (const [originalName, update] of Object.entries(ops.edits)) {
+    const targetName = update.name
     if (targetName === originalName) continue
     
-    // Check if target name exists and is NOT being renamed away in this batch
     if (existingNames.has(targetName) && !editSources.has(targetName)) {
       conflictingEdits.add(originalName)
+    }
+  }
+  
+  // Check for many-to-one collisions
+  for (const [targetName, sources] of targetCounts.entries()) {
+    if (sources.length > 1) {
+      // Multiple sources trying to rename to the same target
+      for (const source of sources) {
+        conflictingEdits.add(source)
+      }
     }
   }
   
