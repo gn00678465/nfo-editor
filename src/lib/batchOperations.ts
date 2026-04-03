@@ -56,7 +56,7 @@ function cloneNfoData(data: NfoData): NfoData {
 }
 
 export function diffActors(loadedData: Record<string, NfoData>): ActorDiff[] {
-  const filePaths = Object.keys(loadedData)
+  const filePaths = Object.keys(loadedData).sort((a, b) => a.localeCompare(b))
   const totalFiles = filePaths.length
   if (totalFiles === 0) return []
 

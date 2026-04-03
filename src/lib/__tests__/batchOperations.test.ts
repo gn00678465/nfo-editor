@@ -105,6 +105,20 @@ describe('diffActors', () => {
     expect(result[0].actor).toMatchObject({ role: 'First', thumb: 'a.jpg', tmdbid: '1' })
   })
 
+  it('selects the same representative actor regardless of insertion order', () => {
+    const ordered = diffActors({
+      'a.nfo': makeNfoData([{ name: 'Alice', role: 'Lead', thumb: 'a.jpg' }]),
+      'b.nfo': makeNfoData([{ name: 'Alice', role: 'Support', thumb: 'b.jpg' }]),
+    })
+    const reversed = diffActors({
+      'b.nfo': makeNfoData([{ name: 'Alice', role: 'Support', thumb: 'b.jpg' }]),
+      'a.nfo': makeNfoData([{ name: 'Alice', role: 'Lead', thumb: 'a.jpg' }]),
+    })
+
+    expect(ordered[0].actor).toMatchObject({ role: 'Lead', thumb: 'a.jpg' })
+    expect(reversed[0].actor).toMatchObject({ role: 'Lead', thumb: 'a.jpg' })
+  })
+
   it('sorts in-all-files actors first, then in-some-files', () => {
     const data = {
       'a.nfo': makeNfoData([{ name: 'Alice' }, { name: 'Bob' }]),
