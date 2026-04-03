@@ -382,19 +382,19 @@ export default function App() {
           // Issue 1: Async stale reconciliation guard
           // Only reconcile in-memory state if the active file hasn't changed
           // during the async operation
-          if (filePath === capturedSelectedPath && 
-              selectedFileRef.current?.filePath === capturedSelectedPath) {
-            setCurrentData(updatedData)
-            setOriginalData(updatedData)
-            setIsDirty(false)
+          if (filePath === capturedSelectedPath) {
             setDirtyFiles(prev => {
               const next = new Set(prev)
               next.delete(filePath)
               return next
             })
           }
-          // Note: Do NOT clear dirtyFiles for non-active files.
-          // They were already filtered out by the guard above.
+          if (filePath === capturedSelectedPath &&
+              selectedFileRef.current?.filePath === capturedSelectedPath) {
+            setCurrentData(updatedData)
+            setOriginalData(updatedData)
+            setIsDirty(false)
+          }
 
           results.push({
             filePath,
