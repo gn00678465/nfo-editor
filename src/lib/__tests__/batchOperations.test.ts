@@ -442,6 +442,95 @@ describe('applyBatchActorOps', () => {
       expect(result.actors[2]).toMatchObject({ name: 'Carol', role: 'Cameo' })
     })
   })
+
+  describe('per-file collision detection', () => {
+    it('allows disjoint sources from different files to rename to same destination', () => {
+      // File A has only Alice, File B has only Bob
+      // Batch ops include Alice → Zoe and Bob → Zoe
+      // This should succeed per file because no single file has both Alice and Bob
+      
+      // Simulating File A: only Alice
+      const dataFileA = makeNfoData([{ name: 'Alice', role: 'Lead' }])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Zoe' },
+          Bob: { name: 'Zoe' },  // Bob doesn't exist in this file
+        },
+      }
+
+      const { data: resultA, conflicts: conflictsA } = applyBatchActorOps(dataFileA, ops)
+
+      expect(conflictsA).toEqual([])
+      expect(resultA.actors).toHaveLength(1)
+      expect(resultA.actors[0]).toMatchObject({ name: 'Zoe', role: 'Lead' })
+
+      // Simulating File B: only Bob
+      const dataFileB = makeNfoData([{ name: 'Bob', role: 'Support' }])
+      
+      const { data: resultB, conflicts: conflictsB } = applyBatchActorOps(dataFileB, ops)
+
+      expect(conflictsB).toEqual([])
+      expect(resultB.actors).toHaveLength(1)
+      expect(resultB.actors[0]).toMatchObject({ name: 'Zoe', role: 'Support' })
+    })
+
+    it('rejects same-file many-to-one collision even if other edits target same destination', () => {
+      // File has both Alice and Bob
+      // Both trying to rename to Zoe
+      // Should fail because within THIS file, it's a many-to-one collision
+      
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Bob', role: 'Support' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Zoe' },
+          Bob: { name: 'Zoe' },
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toContain('Alice')
+      expect(conflicts).toContain('Bob')
+      expect(result.actors[0]).toMatchObject({ name: 'Alice', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'Bob', role: 'Support' })
+    })
+
+    it('allows rename when only one source from batch ops exists in file', () => {
+      // File has Alice, Carol, Dave
+      // Batch ops include Alice → Zoe and Bob → Zoe
+      // Since Bob doesn't exist in this file, only Alice → Zoe is relevant
+      // Should succeed
+      
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Carol', role: 'Cameo' },
+        { name: 'Dave', role: 'Extra' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Zoe' },
+          Bob: { name: 'Zoe' },  // Bob doesn't exist in this file
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toEqual([])
+      expect(result.actors).toHaveLength(3)
+      expect(result.actors[0]).toMatchObject({ name: 'Zoe', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'Carol', role: 'Cameo' })
+      expect(result.actors[2]).toMatchObject({ name: 'Dave', role: 'Extra' })
+    })
+  })
 })
 
 describe('isNoOpActorEdit', () => {
