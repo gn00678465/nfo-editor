@@ -139,28 +139,50 @@ export function applyBatchActorOps(
     order: index,
   }))
 
+  // Build atomic view: what names exist after removals but before edits
+  const existingNames = new Set(next.actors.map(a => a.name))
+  
+  // Build mapping of source -> target for all edits
+  const editSources = new Set(Object.keys(ops.edits))
+  
+  // Detect conflicts: an edit conflicts if its target name would collide
+  // with a name that exists in the final state but is NOT being renamed away
+  const conflictingEdits = new Set<string>()
   for (const [originalName, update] of Object.entries(ops.edits)) {
     const targetName = update.name
-    const nameTaken = targetName !== originalName && next.actors.some(actor => actor.name === targetName)
-    if (nameTaken) {
-      conflicts.push(originalName)
-      continue
-    }
-
-    // Edit ALL matching actors with the same name
-    let foundAny = false
-    next.actors = next.actors.map(actor => {
-      if (actor.name !== originalName) return actor
-      foundAny = true
-      return {
-        ...actor,
-        name: targetName,
-        ...(update.role !== undefined && { role: update.role }),
-      }
-    })
     
-    if (!foundAny) continue
+    // No conflict if renaming to self
+    if (targetName === originalName) continue
+    
+    // Check if target name exists and is NOT being renamed away in this batch
+    if (existingNames.has(targetName) && !editSources.has(targetName)) {
+      conflictingEdits.add(originalName)
+    }
   }
+  
+  // Build a map of original actor identity -> new name/role for atomic application
+  // We track actors by their original identity (name at start) to avoid cascading renames
+  const actorUpdates = new Map<string, { name: string; role?: string }>()
+  for (const [originalName, update] of Object.entries(ops.edits)) {
+    if (!conflictingEdits.has(originalName)) {
+      actorUpdates.set(originalName, update)
+    } else {
+      conflicts.push(originalName)
+    }
+  }
+  
+  // Apply all non-conflicting edits atomically
+  // Each actor is updated based on its original name, preventing cascading renames
+  next.actors = next.actors.map(actor => {
+    const update = actorUpdates.get(actor.name)
+    if (!update) return actor
+    
+    return {
+      ...actor,
+      name: update.name,
+      ...(update.role !== undefined && { role: update.role }),
+    }
+  })
 
   for (const add of ops.adds) {
     if (next.actors.some(actor => actor.name === add.name)) {

@@ -278,6 +278,123 @@ describe('applyBatchActorOps', () => {
     expect(result.actors[0]).toMatchObject({ name: 'Alicia', role: 'Lead' })
     expect(result.actors[1]).toMatchObject({ name: 'Alicia', role: 'Support' })
   })
+
+  describe('atomic rename conflict detection', () => {
+    it('allows two-actor name swap (Bob -> Alice, Alice -> Carol) without conflicts', () => {
+      const data = makeNfoData([
+        { name: 'Bob', role: 'Lead' },
+        { name: 'Alice', role: 'Support' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Bob: { name: 'Alice' },
+          Alice: { name: 'Carol' },
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toEqual([])
+      expect(result.actors).toHaveLength(2)
+      expect(result.actors[0]).toMatchObject({ name: 'Alice', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'Carol', role: 'Support' })
+    })
+
+    it('allows three-actor circular rename (A->B, B->C, C->A)', () => {
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Bob', role: 'Support' },
+        { name: 'Carol', role: 'Cameo' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Bob' },
+          Bob: { name: 'Carol' },
+          Carol: { name: 'Alice' },
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toEqual([])
+      expect(result.actors).toHaveLength(3)
+      expect(result.actors[0]).toMatchObject({ name: 'Bob', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'Carol', role: 'Support' })
+      expect(result.actors[2]).toMatchObject({ name: 'Alice', role: 'Cameo' })
+    })
+
+    it('rejects rename to name that exists and is not being renamed away', () => {
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Bob', role: 'Support' },
+        { name: 'Carol', role: 'Cameo' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Carol' }, // Carol exists and is NOT being renamed
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toContain('Alice')
+      expect(result.actors[0]).toMatchObject({ name: 'Alice', role: 'Lead' }) // unchanged
+      expect(result.actors[1]).toMatchObject({ name: 'Bob', role: 'Support' })
+      expect(result.actors[2]).toMatchObject({ name: 'Carol', role: 'Cameo' })
+    })
+
+    it('allows rename to name that will be removed in same batch', () => {
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Bob', role: 'Support' },
+      ])
+      const ops = {
+        adds: [],
+        removals: ['Bob'],
+        edits: {
+          Alice: { name: 'Bob' }, // Bob will be removed, so this is OK
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toEqual([])
+      expect(result.actors).toHaveLength(1)
+      expect(result.actors[0]).toMatchObject({ name: 'Bob', role: 'Lead' })
+    })
+
+    it('rejects multiple sources targeting same non-renamed destination', () => {
+      const data = makeNfoData([
+        { name: 'Alice', role: 'Lead' },
+        { name: 'Bob', role: 'Support' },
+        { name: 'Carol', role: 'Cameo' },
+        { name: 'Dave', role: 'Extra' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          Alice: { name: 'Dave' }, // Dave exists and is not being renamed
+          Bob: { name: 'Dave' },   // Same conflict
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toContain('Alice')
+      expect(conflicts).toContain('Bob')
+      expect(result.actors[0]).toMatchObject({ name: 'Alice', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'Bob', role: 'Support' })
+      expect(result.actors[2]).toMatchObject({ name: 'Carol', role: 'Cameo' })
+      expect(result.actors[3]).toMatchObject({ name: 'Dave', role: 'Extra' })
+    })
+  })
 })
 
 describe('isNoOpActorEdit', () => {
