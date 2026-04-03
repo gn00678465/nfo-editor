@@ -3,7 +3,6 @@ import type { NfoFile } from '../App'
 import type { Actor, NfoData } from '../lib/nfoParser'
 import {
   diffActors,
-  PRESERVE_ROLES_SENTINEL,
   type BatchActorOps,
   type ActorDiff,
   type ApplyResult,
@@ -81,18 +80,20 @@ interface ActorRowProps {
   editing: boolean
   stagedEdit: { name: string; role?: string } | undefined
   editDraft: { name: string; role: string }
+  roleMode: 'preserve' | 'normalize'
   onStartEdit: () => void
   onCommitEdit: () => void
   onCancelEdit: () => void
   onClearEdit: () => void
   onToggleRemoval: () => void
   onEditDraftChange: (draft: { name: string; role: string }) => void
+  onRoleModeChange: (mode: 'preserve' | 'normalize') => void
 }
 
 function ActorRow({
-  diff, removed, editing, stagedEdit, editDraft,
+  diff, removed, editing, stagedEdit, editDraft, roleMode,
   onStartEdit, onCommitEdit, onCancelEdit, onClearEdit,
-  onToggleRemoval, onEditDraftChange,
+  onToggleRemoval, onEditDraftChange, onRoleModeChange,
 }: ActorRowProps) {
   const name = diff.actor.name
   const displayName = stagedEdit?.name ?? name
@@ -131,22 +132,52 @@ function ActorRow({
             </div>
             <div>
               <label style={labelSm}>Role</label>
-              <input
-                style={{
-                  ...inputSm,
-                  ...(editDraft.role === PRESERVE_ROLES_SENTINEL && {
-                    fontStyle: 'italic',
-                    color: 'var(--text-muted)',
-                  }),
-                }}
-                value={editDraft.role === PRESERVE_ROLES_SENTINEL ? '' : editDraft.role}
-                placeholder={editDraft.role === PRESERVE_ROLES_SENTINEL ? '(preserve existing roles)' : undefined}
-                onChange={e => onEditDraftChange({ ...editDraft, role: e.target.value })}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') onCommitEdit()
-                  if (e.key === 'Escape') onCancelEdit()
-                }}
-              />
+              {diff.rolesDiffer ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 8, fontSize: 11 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name={`rolemode-${diff.actor.name}`}
+                        checked={roleMode === 'preserve'}
+                        onChange={() => onRoleModeChange('preserve')}
+                      />
+                      <span style={{ color: 'var(--text-default)' }}>Preserve existing</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name={`rolemode-${diff.actor.name}`}
+                        checked={roleMode === 'normalize'}
+                        onChange={() => onRoleModeChange('normalize')}
+                      />
+                      <span style={{ color: 'var(--text-default)' }}>Set one role</span>
+                    </label>
+                  </div>
+                  {roleMode === 'normalize' && (
+                    <input
+                      style={inputSm}
+                      value={editDraft.role}
+                      placeholder="Enter role for all files"
+                      onChange={e => onEditDraftChange({ ...editDraft, role: e.target.value })}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') onCommitEdit()
+                        if (e.key === 'Escape') onCancelEdit()
+                      }}
+                    />
+                  )}
+                </div>
+              ) : (
+                <input
+                  style={inputSm}
+                  value={editDraft.role}
+                  onChange={e => onEditDraftChange({ ...editDraft, role: e.target.value })}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') onCommitEdit()
+                    if (e.key === 'Escape') onCancelEdit()
+                  }}
+                />
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -199,11 +230,19 @@ function ActorRow({
               <div
                 style={{
                   fontSize: 11, marginTop: 1,
-                  color: diff.rolesDiffer && !stagedEdit ? 'var(--accent-amber)' : 'var(--text-secondary)',
-                  fontStyle: diff.rolesDiffer && !stagedEdit ? 'italic' : 'normal',
+                  color: diff.rolesDiffer && !stagedEdit
+                    ? 'var(--accent-amber)'
+                    : diff.rolesDiffer && stagedEdit && !stagedEdit.role
+                    ? 'var(--text-muted)'
+                    : 'var(--text-secondary)',
+                  fontStyle: diff.rolesDiffer && (!stagedEdit || !stagedEdit.role) ? 'italic' : 'normal',
                 }}
               >
-                {diff.rolesDiffer && !stagedEdit ? 'role varies across files' : displayRole}
+                {diff.rolesDiffer && !stagedEdit
+                  ? 'role varies across files'
+                  : diff.rolesDiffer && stagedEdit && !stagedEdit.role
+                  ? 'preserving existing roles'
+                  : displayRole}
               </div>
             )}
           </div>
@@ -324,6 +363,7 @@ export default function BatchEditor({
   // Inline edit state
   const [editingActor, setEditingActor] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState({ name: '', role: '' })
+  const [roleMode, setRoleMode] = useState<'preserve' | 'normalize'>('preserve')
 
   // Add-actor form state
   const [addName, setAddName] = useState('')
@@ -357,27 +397,42 @@ export default function BatchEditor({
     const existing = ops.edits[diff.actor.name]
     setEditingActor(diff.actor.name)
     
-    // For mixed-role entries, start with sentinel meaning "preserve existing roles"
-    // For uniform entries, start with the actual role
-    const initialRole = existing?.role ?? (diff.rolesDiffer ? PRESERVE_ROLES_SENTINEL : (diff.actor.role ?? ''))
-    
-    setEditDraft({
-      name: existing?.name ?? diff.actor.name,
-      role: initialRole,
-    })
+    // Determine initial mode and role
+    if (existing) {
+      // Restoring a previously staged edit
+      const hasRole = existing.role !== undefined
+      setRoleMode(hasRole ? 'normalize' : 'preserve')
+      setEditDraft({
+        name: existing.name,
+        role: existing.role ?? diff.actor.role ?? '',
+      })
+    } else if (diff.rolesDiffer) {
+      // Mixed-role actor, start in preserve mode
+      setRoleMode('preserve')
+      setEditDraft({
+        name: diff.actor.name,
+        role: diff.actor.role ?? '',
+      })
+    } else {
+      // Uniform role, start in normalize mode
+      setRoleMode('normalize')
+      setEditDraft({
+        name: diff.actor.name,
+        role: diff.actor.role ?? '',
+      })
+    }
   }, [ops.edits])
 
   const commitEdit = useCallback((originalName: string) => {
     const name = editDraft.name.trim()
     if (!name) return
     const diff = actorDiffs.find(d => d.actor.name === originalName)
+    if (!diff) return
     
-    // Detect if role should be preserved or set
-    const roleIsSentinel = editDraft.role === PRESERVE_ROLES_SENTINEL
-    const roleExplicitlySet = !roleIsSentinel
-    
-    // Name unchanged and role is sentinel → no-op
-    const unchanged = name === originalName && roleIsSentinel
+    // Determine if this is a no-op
+    const nameUnchanged = name === originalName
+    const preservingRoles = roleMode === 'preserve'
+    const unchanged = nameUnchanged && preservingRoles
     
     setOps(prev => {
       const next = { ...prev, edits: { ...prev.edits } }
@@ -386,13 +441,13 @@ export default function BatchEditor({
       } else {
         next.edits[originalName] = {
           name,
-          ...(roleExplicitlySet && { role: editDraft.role }),
+          ...(roleMode === 'normalize' && { role: editDraft.role }),
         }
       }
       return next
     })
     setEditingActor(null)
-  }, [editDraft, actorDiffs])
+  }, [editDraft, roleMode, actorDiffs])
 
   const cancelEdit = useCallback(() => {
     setEditingActor(null)
@@ -506,12 +561,14 @@ export default function BatchEditor({
                     editing={editingActor === diff.actor.name}
                     stagedEdit={ops.edits[diff.actor.name]}
                     editDraft={editDraft}
+                    roleMode={roleMode}
                     onStartEdit={() => startEdit(diff)}
                     onCommitEdit={() => commitEdit(diff.actor.name)}
                     onCancelEdit={cancelEdit}
                     onClearEdit={() => clearActorEdit(diff.actor.name)}
                     onToggleRemoval={() => toggleRemoval(diff.actor.name)}
                     onEditDraftChange={setEditDraft}
+                    onRoleModeChange={setRoleMode}
                   />
                 ))}
               </div>
@@ -536,12 +593,14 @@ export default function BatchEditor({
                     editing={editingActor === diff.actor.name}
                     stagedEdit={ops.edits[diff.actor.name]}
                     editDraft={editDraft}
+                    roleMode={roleMode}
                     onStartEdit={() => startEdit(diff)}
                     onCommitEdit={() => commitEdit(diff.actor.name)}
                     onCancelEdit={cancelEdit}
                     onClearEdit={() => clearActorEdit(diff.actor.name)}
                     onToggleRemoval={() => toggleRemoval(diff.actor.name)}
                     onEditDraftChange={setEditDraft}
+                    onRoleModeChange={setRoleMode}
                   />
                 ))}
               </div>
@@ -777,27 +836,35 @@ export default function BatchEditor({
                 </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {Object.entries(ops.edits).map(([original, update]) => (
-                  <div
-                    key={original}
-                    style={{
-                      padding: '6px 10px',
-                      background: 'rgba(99,102,241,0.05)',
-                      border: '1px solid rgba(99,102,241,0.2)',
-                      borderRadius: 5, display: 'flex', alignItems: 'center', gap: 6,
-                    }}
-                  >
-                    <Edit2 size={11} style={{ color: 'var(--accent-indigo)', flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{original}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>→</span>
-                    <span style={{ fontSize: 12, color: 'var(--accent-indigo)', fontWeight: 500 }}>
-                      {update.name}
-                    </span>
-                    {update.role && (
-                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{update.role}</span>
-                    )}
-                  </div>
-                ))}
+                {Object.entries(ops.edits).map(([original, update]) => {
+                  const diff = actorDiffs.find(d => d.actor.name === original)
+                  const preservingRoles = !update.role && diff?.rolesDiffer
+                  return (
+                    <div
+                      key={original}
+                      style={{
+                        padding: '6px 10px',
+                        background: 'rgba(99,102,241,0.05)',
+                        border: '1px solid rgba(99,102,241,0.2)',
+                        borderRadius: 5, display: 'flex', alignItems: 'center', gap: 6,
+                      }}
+                    >
+                      <Edit2 size={11} style={{ color: 'var(--accent-indigo)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{original}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>→</span>
+                      <span style={{ fontSize: 12, color: 'var(--accent-indigo)', fontWeight: 500 }}>
+                        {update.name}
+                      </span>
+                      {update.role ? (
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{update.role}</span>
+                      ) : preservingRoles ? (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          (preserving existing roles)
+                        </span>
+                      ) : null}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
