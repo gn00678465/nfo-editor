@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { diffActors, applyBatchActorOps } from '../batchOperations'
+import { diffActors, applyBatchActorOps, isNoOpActorEdit } from '../batchOperations'
 import type { NfoData } from '../nfoParser'
 
 function makeNfoData(actors: { name: string; role?: string; thumb?: string; order?: number; tmdbid?: string; type?: string; profile?: string }[]): NfoData {
@@ -277,5 +277,18 @@ describe('applyBatchActorOps', () => {
     expect(result.actors).toHaveLength(2)
     expect(result.actors[0]).toMatchObject({ name: 'Alicia', role: 'Lead' })
     expect(result.actors[1]).toMatchObject({ name: 'Alicia', role: 'Support' })
+  })
+})
+
+describe('isNoOpActorEdit', () => {
+  it('treats mixed-role normalize edits as changes even when the role matches the representative role', () => {
+    expect(
+      isNoOpActorEdit(
+        { actor: { name: 'Alice', role: 'Lead' }, rolesDiffer: true, fileCount: 2, totalFiles: 2 },
+        'Alice',
+        { name: 'Alice', role: 'Lead' },
+        'normalize',
+      ),
+    ).toBe(false)
   })
 })

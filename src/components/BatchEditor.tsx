@@ -3,6 +3,7 @@ import type { NfoFile } from '../App'
 import type { Actor, NfoData } from '../lib/nfoParser'
 import {
   diffActors,
+  isNoOpActorEdit,
   type BatchActorOps,
   type ActorDiff,
   type ApplyResult,
@@ -435,10 +436,7 @@ export default function BatchEditor({
     if (!diff) return
     
     // Determine if this is a no-op
-    const nameUnchanged = name === originalName
-    const preservingRoles = roleMode === 'preserve'
-    const roleUnchanged = editDraft.role === (diff.actor.role ?? '')
-    const unchanged = nameUnchanged && (preservingRoles || roleUnchanged)
+    const unchanged = isNoOpActorEdit(diff, originalName, editDraft, roleMode)
     
     setOps(prev => {
       const next = { ...prev, edits: { ...prev.edits } }

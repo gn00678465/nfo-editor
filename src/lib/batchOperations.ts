@@ -15,6 +15,19 @@ export interface ActorDiff {
   totalFiles: number
 }
 
+export function isNoOpActorEdit(
+  diff: ActorDiff,
+  originalName: string,
+  editDraft: { name: string; role: string },
+  roleMode: 'preserve' | 'normalize',
+): boolean {
+  const nameUnchanged = editDraft.name.trim() === originalName
+  const preservingRoles = roleMode === 'preserve'
+  const roleUnchanged = editDraft.role === (diff.actor.role ?? '')
+
+  return nameUnchanged && (preservingRoles || (roleUnchanged && !diff.rolesDiffer))
+}
+
 export interface ApplyResult {
   filePath: string
   success: boolean
