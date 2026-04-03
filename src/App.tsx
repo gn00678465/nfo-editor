@@ -242,6 +242,7 @@ export default function App() {
 
   const handleDataChange = useCallback((updated: NfoData) => {
     setCurrentData(updated)
+    currentDataRef.current = updated
     setIsDirty(true)
     setSaveStatus('idle')
     if (selectedFile) {
@@ -316,6 +317,7 @@ export default function App() {
   const handleDiscard = useCallback(() => {
     if (!originalData || !selectedFile) return
     setCurrentData(originalData)
+    currentDataRef.current = originalData
     setIsDirty(false)
     setSaveStatus('idle')
     setDirtyFiles(prev => {
@@ -557,20 +559,33 @@ export default function App() {
           // Issue 1: Async stale reconciliation guard
           // Only reconcile in-memory state if the active file hasn't changed
           // during the async operation
-          if (filePath === capturedSelectedPath) {
+          const isCapturedActiveFile = filePath === capturedSelectedPath
+          const canReconcileActiveFile =
+            isCapturedActiveFile &&
+            selectedFileRef.current?.filePath === capturedSelectedPath &&
+            currentDataRef.current === capturedCurrentData
+
+          // Keep the disk baseline in sync for the active file, even if the
+          // editor picked up newer unsaved edits while the batch write ran.
+          if (isCapturedActiveFile && selectedFileRef.current?.filePath === capturedSelectedPath) {
+            setOriginalData(updatedData)
+          }
+
+          if (canReconcileActiveFile) {
             setDirtyFiles(prev => {
               const next = new Set(prev)
               next.delete(filePath)
               return next
             })
-          }
-          if (filePath === capturedSelectedPath &&
-              selectedFileRef.current?.filePath === capturedSelectedPath) {
             setCurrentData(updatedData)
-            setOriginalData(updatedData)
+            currentDataRef.current = updatedData
             setIsDirty(false)
           }
-          setBatchLoadedData(prev => ({ ...prev, [filePath]: updatedData }))
+          setBatchLoadedData(prev => (
+            isCapturedActiveFile && !canReconcileActiveFile
+              ? prev
+              : { ...prev, [filePath]: updatedData }
+          ))
 
           results.push({
             filePath,
