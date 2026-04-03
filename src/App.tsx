@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { parseNfo, serializeNfo, emptyNfoData, type NfoData } from './lib/nfoParser'
+import { applyBatchActorOps, type BatchActorOps, type ApplyResult } from './lib/batchOperations'
 import FileList from './components/FileList'
 import MetadataEditor from './components/MetadataEditor'
+import BatchEditor from './components/BatchEditor'
 import ThemeToggle from './components/ThemeToggle'
 import { Button } from './components/ui/button'
 import { Separator } from './components/ui/separator'
@@ -263,6 +265,141 @@ export default function App() {
     setBatchSelectedFiles(new Set())
   }, [])
 
+  const handleBatchApply = useCallback(async (ops: BatchActorOps): Promise<ApplyResult[]> => {
+    setIsBatchWriting(true)
+    const results: ApplyResult[] = []
+
+    try {
+      for (const filePath of batchSelectedFiles) {
+        let data: NfoData | undefined
+        let parseError: string | undefined
+
+        // Use in-memory data if this is the currently selected file
+        if (selectedFile?.filePath === filePath && currentData) {
+          data = currentData
+        } else {
+          // Read from disk/browser handle
+          let content: string | undefined
+          if (isElectron) {
+            const result = await window.electronAPI!.readFile(filePath)
+            if (!result.success) {
+              results.push({
+                filePath,
+                success: false,
+                conflicts: [],
+                error: 'Failed to read file',
+              })
+              continue
+            }
+            content = result.content
+          } else {
+            const handle = fileHandles.current.get(filePath)
+            if (!handle) {
+              results.push({
+                filePath,
+                success: false,
+                conflicts: [],
+                error: 'File handle not found',
+              })
+              continue
+            }
+            const fileObj = await handle.getFile()
+            content = await fileObj.text()
+          }
+
+          if (!content) {
+            results.push({
+              filePath,
+              success: false,
+              conflicts: [],
+              error: 'Empty file content',
+            })
+            continue
+          }
+
+          try {
+            data = parseNfo(content)
+          } catch (e) {
+            parseError = e instanceof Error ? e.message : 'Parse error'
+          }
+        }
+
+        if (!data) {
+          results.push({
+            filePath,
+            success: false,
+            conflicts: [],
+            error: parseError ?? 'Failed to parse NFO',
+          })
+          continue
+        }
+
+        // Apply batch operations
+        const { data: updatedData, conflicts } = applyBatchActorOps(data, ops)
+
+        // Serialize
+        const xml = serializeNfo(updatedData)
+
+        // Write back
+        let writeSuccess = false
+        if (isElectron) {
+          const result = await window.electronAPI!.writeFile(filePath, xml)
+          writeSuccess = result.success
+        } else {
+          const handle = fileHandles.current.get(filePath)
+          if (handle) {
+            try {
+              const writable = await handle.createWritable()
+              await writable.write(xml)
+              await writable.close()
+              writeSuccess = true
+            } catch {
+              writeSuccess = false
+            }
+          }
+        }
+
+        if (writeSuccess) {
+          // Reconcile in-memory state if this is the active file
+          if (selectedFile?.filePath === filePath) {
+            setCurrentData(updatedData)
+            setOriginalData(updatedData)
+            setIsDirty(false)
+            setDirtyFiles(prev => {
+              const next = new Set(prev)
+              next.delete(filePath)
+              return next
+            })
+          } else {
+            // Clear dirty flag for non-active files
+            setDirtyFiles(prev => {
+              const next = new Set(prev)
+              next.delete(filePath)
+              return next
+            })
+          }
+
+          results.push({
+            filePath,
+            success: true,
+            conflicts,
+          })
+        } else {
+          results.push({
+            filePath,
+            success: false,
+            conflicts,
+            error: 'Failed to write file',
+          })
+        }
+      }
+    } finally {
+      setIsBatchWriting(false)
+    }
+
+    return results
+  }, [batchSelectedFiles, selectedFile, currentData])
+
   // Fetch app version on mount
   useEffect(() => {
     if (window.electronAPI?.getAppVersion) {
@@ -404,7 +541,14 @@ export default function App() {
 
           {/* Editor content */}
           <div className="flex-1 overflow-hidden">
-            {currentData ? (
+            {batchMode && batchSelectedFiles.size > 0 ? (
+              <BatchEditor
+                selectedFiles={nfoFiles.filter(f => batchSelectedFiles.has(f.filePath))}
+                loadedData={{}}
+                isSaving={isBatchWriting}
+                onApply={handleBatchApply}
+              />
+            ) : currentData ? (
               <MetadataEditor data={currentData} onChange={handleDataChange} />
             ) : (
               <div
