@@ -490,6 +490,12 @@ export default function BatchEditor({
       setApplyError(null)
       const r = await onApply(ops)
       setResults(r)
+      setOps(EMPTY_OPS)
+      setEditingActor(null)
+      setEditDraft({ name: '', role: '' })
+      setRoleMode('preserve')
+      setAddName('')
+      setAddRole('')
       setView('result')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
