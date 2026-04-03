@@ -372,8 +372,10 @@ export default function App() {
             } catch {
               content = undefined
             }
-            if (!content) {
+            if (content === undefined) {
               loadFailed = true
+            } else if (content === '') {
+              data = emptyNfoData()
             } else {
               try {
                 data = parseNfo(content)
@@ -470,8 +472,10 @@ export default function App() {
             } catch {
               content = undefined
             }
-            if (!content) {
+            if (content === undefined) {
               loadFailed = true
+            } else if (content === '') {
+              data = emptyNfoData()
             } else {
               try {
                 data = parseNfo(content)
