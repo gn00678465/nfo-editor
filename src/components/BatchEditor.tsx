@@ -18,6 +18,7 @@ import {
 export interface BatchEditorProps {
   selectedFiles: NfoFile[]
   loadedData: Record<string, NfoData>
+  preloadErrors: Set<string>
   isSaving: boolean
   onApply: (ops: BatchActorOps) => Promise<ApplyResult[]>
 }
@@ -358,6 +359,7 @@ const secondaryBtn: React.CSSProperties = {
 export default function BatchEditor({
   selectedFiles,
   loadedData,
+  preloadErrors,
   isSaving,
   onApply,
 }: BatchEditorProps) {
@@ -377,11 +379,16 @@ export default function BatchEditor({
 
   const actorDiffs = useMemo(() => diffActors(loadedData), [loadedData])
   const totalFiles = selectedFiles.length
+  const errorCount = useMemo(
+    () => selectedFiles.reduce((count, file) => count + (preloadErrors.has(file.filePath) ? 1 : 0), 0),
+    [selectedFiles, preloadErrors],
+  )
   const loadedCount = useMemo(
     () => selectedFiles.reduce((count, file) => count + (loadedData[file.filePath] ? 1 : 0), 0),
     [selectedFiles, loadedData],
   )
-  const allLoaded = loadedCount === totalFiles
+  const allLoaded = loadedCount === totalFiles && errorCount === 0
+  const hasErrors = errorCount > 0
 
   const inAllFiles = useMemo(
     () => actorDiffs.filter(d => d.fileCount === d.totalFiles),
@@ -736,7 +743,13 @@ export default function BatchEditor({
 
         {/* Sticky apply footer */}
         <div style={stickyFooter}>
-          {!allLoaded && (
+          {hasErrors && (
+            <div style={{ marginRight: 'auto', alignSelf: 'center', fontSize: 11, color: 'var(--error, #ef4444)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={14} />
+              {errorCount} {errorCount === 1 ? 'file' : 'files'} failed to load
+            </div>
+          )}
+          {!allLoaded && !hasErrors && (
             <div style={{ marginRight: 'auto', alignSelf: 'center', fontSize: 11, color: 'var(--text-muted)' }}>
               Loading {loadedCount} / {totalFiles} files…
             </div>

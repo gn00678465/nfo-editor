@@ -94,6 +94,7 @@ export default function App() {
   const [batchMode, setBatchMode] = useState(false)
   const [batchSelectedFiles, setBatchSelectedFiles] = useState<Set<string>>(new Set())
   const [batchLoadedData, setBatchLoadedData] = useState<Record<string, NfoData>>({})
+  const [batchPreloadErrors, setBatchPreloadErrors] = useState<Set<string>>(new Set())
 
   // Browser-only: file handle map for File System Access API
   const fileHandles = useRef<FileHandleMap>(new Map())
@@ -174,6 +175,7 @@ export default function App() {
       batchSelectedRef.current = new Set()
       setBatchSelectedFiles(new Set())
       setBatchLoadedData({})
+      setBatchPreloadErrors(new Set())
       batchPreloadPendingRef.current = new Set()
       batchSessionRef.current += 1
     } finally {
@@ -336,6 +338,7 @@ export default function App() {
       batchSelectedRef.current = new Set()
       setBatchSelectedFiles(new Set())
       setBatchLoadedData({})
+      setBatchPreloadErrors(new Set())
       batchPreloadPendingRef.current = new Set()
       batchSessionRef.current += 1
     }
@@ -360,6 +363,7 @@ export default function App() {
         const snapshotCurrentDataPath = currentDataPathRef.current
         try {
           let data = snapshotCurrentDataPath === filePath && snapshotCurrentData ? snapshotCurrentData : undefined
+          let loadFailed = false
 
           if (!data) {
             let content: string | undefined
@@ -368,29 +372,50 @@ export default function App() {
             } catch {
               content = undefined
             }
-            if (!content) data = emptyNfoData()
-            else {
+            if (!content) {
+              loadFailed = true
+            } else {
               try {
                 data = parseNfo(content)
               } catch {
-                data = emptyNfoData()
+                loadFailed = true
               }
             }
           }
 
           if (sessionToken === batchSessionRef.current && batchSelectedRef.current.has(filePath)) {
-            setBatchLoadedData(prev => (prev[filePath] ? prev : { ...prev, [filePath]: data }))
+            if (loadFailed) {
+              setBatchPreloadErrors(prev => new Set(prev).add(filePath))
+            } else if (data) {
+              setBatchLoadedData(prev => (prev[filePath] ? prev : { ...prev, [filePath]: data }))
+              setBatchPreloadErrors(prev => {
+                if (prev.has(filePath)) {
+                  const next = new Set(prev)
+                  next.delete(filePath)
+                  return next
+                }
+                return prev
+              })
+            }
           }
         } finally {
           batchPreloadPendingRef.current.delete(filePath)
         }
       })()
     } else {
-      // Remove from loaded data when deselecting
+      // Remove from loaded data and errors when deselecting
       setBatchLoadedData(prev => {
         const next = { ...prev }
         delete next[filePath]
         return next
+      })
+      setBatchPreloadErrors(prev => {
+        if (prev.has(filePath)) {
+          const next = new Set(prev)
+          next.delete(filePath)
+          return next
+        }
+        return prev
       })
     }
   }, [currentData])
@@ -407,11 +432,18 @@ export default function App() {
     batchSelectedRef.current = new Set(allPaths)
     setBatchSelectedFiles(new Set(allPaths))
 
-    // Prune stale loaded data synchronously
+    // Prune stale loaded data and errors synchronously
     setBatchLoadedData(prev => {
       const next: Record<string, NfoData> = {}
       for (const path of allPaths) {
         if (prev[path]) next[path] = prev[path]
+      }
+      return next
+    })
+    setBatchPreloadErrors(prev => {
+      const next = new Set<string>()
+      for (const path of allPaths) {
+        if (prev.has(path)) next.add(path)
       }
       return next
     })
@@ -429,6 +461,7 @@ export default function App() {
         const snapshotCurrentDataPath = currentDataPathRef.current
         try {
           let data = snapshotCurrentDataPath === filePath && snapshotCurrentData ? snapshotCurrentData : undefined
+          let loadFailed = false
 
           if (!data) {
             let content: string | undefined
@@ -437,18 +470,31 @@ export default function App() {
             } catch {
               content = undefined
             }
-            if (!content) data = emptyNfoData()
-            else {
+            if (!content) {
+              loadFailed = true
+            } else {
               try {
                 data = parseNfo(content)
               } catch {
-                data = emptyNfoData()
+                loadFailed = true
               }
             }
           }
 
           if (sessionToken === batchSessionRef.current && batchSelectedRef.current.has(filePath)) {
-            setBatchLoadedData(prev => (prev[filePath] ? prev : { ...prev, [filePath]: data }))
+            if (loadFailed) {
+              setBatchPreloadErrors(prev => new Set(prev).add(filePath))
+            } else if (data) {
+              setBatchLoadedData(prev => (prev[filePath] ? prev : { ...prev, [filePath]: data }))
+              setBatchPreloadErrors(prev => {
+                if (prev.has(filePath)) {
+                  const next = new Set(prev)
+                  next.delete(filePath)
+                  return next
+                }
+                return prev
+              })
+            }
           }
         } finally {
           batchPreloadPendingRef.current.delete(filePath)
@@ -461,6 +507,7 @@ export default function App() {
     batchSelectedRef.current = new Set()
     setBatchSelectedFiles(new Set())
     setBatchLoadedData({})
+    setBatchPreloadErrors(new Set())
     batchPreloadPendingRef.current = new Set()
     batchSessionRef.current += 1
   }, [])
@@ -755,6 +802,7 @@ export default function App() {
                 key={Array.from(batchSelectedFiles).sort().join('|')}
                 selectedFiles={nfoFiles.filter(f => batchSelectedFiles.has(f.filePath))}
                 loadedData={batchLoadedData}
+                preloadErrors={batchPreloadErrors}
                 isSaving={isSaving}
                 onApply={handleBatchApply}
               />
