@@ -86,10 +86,18 @@ export default function App() {
   const fileHandles = useRef<FileHandleMap>(new Map())
   const isPickerOpen = useRef(false)
   const selectedFileRef = useRef<NfoFile | null>(null)
+  // Batch session token: incremented on any action that invalidates pending preloads
+  const batchSessionRef = useRef(0)
+  // Track current batch selection for async validation
+  const batchSelectedRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     selectedFileRef.current = selectedFile
   }, [selectedFile])
+
+  useEffect(() => {
+    batchSelectedRef.current = batchSelectedFiles
+  }, [batchSelectedFiles])
 
   const handleOpenFolder = useCallback(async () => {
     if (isPickerOpen.current) return
@@ -139,6 +147,7 @@ export default function App() {
       setBatchMode(false)
       setBatchSelectedFiles(new Set())
       setBatchLoadedData({})
+      batchSessionRef.current += 1
     } finally {
       isPickerOpen.current = false
     }
@@ -248,6 +257,7 @@ export default function App() {
       if (!next) {
         setBatchSelectedFiles(new Set())
         setBatchLoadedData({})
+        batchSessionRef.current += 1
       }
       return next
     })
@@ -262,6 +272,9 @@ export default function App() {
     })
 
     if (selected) {
+      // Capture session token before async work
+      const sessionToken = batchSessionRef.current
+
       // Load file data if not already loaded
       setBatchLoadedData(prev => {
         if (prev[filePath]) return prev // Already loaded
@@ -300,7 +313,10 @@ export default function App() {
           }
 
           if (data) {
-            setBatchLoadedData(prev => ({ ...prev, [filePath]: data }))
+            // Guard: only write if session is still valid and file is still selected
+            if (sessionToken === batchSessionRef.current && batchSelectedRef.current.has(filePath)) {
+              setBatchLoadedData(prev => ({ ...prev, [filePath]: data }))
+            }
           }
         })()
 
@@ -325,6 +341,18 @@ export default function App() {
   const handleBatchSelectAll = useCallback(async () => {
     const allPaths = filteredFiles.map(file => file.filePath)
     setBatchSelectedFiles(new Set(allPaths))
+
+    // Prune stale loaded data synchronously
+    setBatchLoadedData(prev => {
+      const next: Record<string, NfoData> = {}
+      for (const path of allPaths) {
+        if (prev[path]) next[path] = prev[path]
+      }
+      return next
+    })
+
+    // Capture session token before async preload
+    const sessionToken = batchSessionRef.current
 
     // Preload all files
     for (const filePath of allPaths) {
@@ -366,7 +394,10 @@ export default function App() {
           }
 
           if (data) {
-            setBatchLoadedData(prev => ({ ...prev, [filePath]: data }))
+            // Guard: only write if session is still valid and file is still selected
+            if (sessionToken === batchSessionRef.current && batchSelectedRef.current.has(filePath)) {
+              setBatchLoadedData(prev => ({ ...prev, [filePath]: data }))
+            }
           }
         })()
 
@@ -377,6 +408,8 @@ export default function App() {
 
   const handleBatchClear = useCallback(() => {
     setBatchSelectedFiles(new Set())
+    setBatchLoadedData({})
+    batchSessionRef.current += 1
   }, [])
 
   const handleBatchApply = useCallback(async (ops: BatchActorOps): Promise<ApplyResult[]> => {
