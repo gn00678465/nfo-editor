@@ -139,54 +139,49 @@ export function applyBatchActorOps(
     order: index,
   }))
 
-  // Build atomic view: what names exist after removals but before edits
-  const existingNames = new Set(next.actors.map(a => a.name))
+  // Build final-mapping-based conflict detection:
+  // After removals, determine distinct source actor-name groups present in this file.
+  // For each source group, compute its final target name.
+  // If two or more distinct source groups map to the same final name → conflict.
   
-  // Only sources that actually rename away vacate their original name
-  const renamingSources = new Set(
-    Object.entries(ops.edits)
-      .filter(([originalName, update]) => update.name.trim() !== originalName)
-      .map(([originalName]) => originalName),
-  )
+  // Get all distinct actor names present in the file after removals
+  const presentActorNames = new Set(next.actors.map(a => a.name))
   
-  // Filter ops.edits to only those actually present in this file
-  const relevantEdits = Object.entries(ops.edits).filter(([originalName]) =>
-    existingNames.has(originalName)
-  )
+  // Build source-group → final-name mapping
+  // A source group is a distinct actor name currently in the file
+  const sourceGroupToFinalName = new Map<string, string>()
   
-  // Count how many sources (present in THIS file) target each destination name
-  const targetCounts = new Map<string, string[]>()
-  for (const [originalName, update] of relevantEdits) {
-    const targetName = update.name.trim()
-    if (targetName === originalName) continue // Skip self-renames
-    
-    if (!targetCounts.has(targetName)) {
-      targetCounts.set(targetName, [])
+  for (const actorName of presentActorNames) {
+    // Check if there's an edit for this source group
+    const edit = ops.edits[actorName]
+    if (edit && edit.name.trim() !== actorName) {
+      // This source group will be renamed to edit.name
+      sourceGroupToFinalName.set(actorName, edit.name.trim())
+    } else {
+      // No edit or self-rename → final name is the original name
+      sourceGroupToFinalName.set(actorName, actorName)
     }
-    targetCounts.get(targetName)!.push(originalName)
   }
   
-  // Detect conflicts: an edit conflicts if:
-  // 1. Its target name exists and is NOT being renamed away (would collide with existing)
-  // 2. Multiple sources (in this file) target the same destination (many-to-one collision)
+  // Validate the final mapping: check if any final name appears more than once
+  const finalNameToSourceGroups = new Map<string, string[]>()
+  for (const [sourceGroup, finalName] of sourceGroupToFinalName.entries()) {
+    if (!finalNameToSourceGroups.has(finalName)) {
+      finalNameToSourceGroups.set(finalName, [])
+    }
+    finalNameToSourceGroups.get(finalName)!.push(sourceGroup)
+  }
+  
+  // Detect conflicts: any final name with multiple source groups is a conflict
   const conflictingEdits = new Set<string>()
-  
-  // Check for collisions with existing names
-  for (const [originalName, update] of relevantEdits) {
-    const targetName = update.name.trim()
-    if (targetName === originalName) continue
-    
-    if (existingNames.has(targetName) && !renamingSources.has(targetName)) {
-      conflictingEdits.add(originalName)
-    }
-  }
-  
-  // Check for many-to-one collisions within this file
-  for (const [targetName, sources] of targetCounts.entries()) {
-    if (sources.length > 1) {
-      // Multiple sources in THIS file trying to rename to the same target
-      for (const source of sources) {
-        conflictingEdits.add(source)
+  for (const [finalName, sourceGroups] of finalNameToSourceGroups.entries()) {
+    if (sourceGroups.length > 1) {
+      // Multiple source groups map to the same final name → conflict
+      // Mark all source groups that have edits (non-identity mappings) as conflicting
+      for (const sourceGroup of sourceGroups) {
+        if (sourceGroupToFinalName.get(sourceGroup) !== sourceGroup) {
+          conflictingEdits.add(sourceGroup)
+        }
       }
     }
   }

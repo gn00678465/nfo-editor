@@ -463,6 +463,85 @@ describe('applyBatchActorOps', () => {
       expect(result.actors[1]).toMatchObject({ name: 'Dave', role: 'Support' }) // Bob → Dave succeeds
       expect(result.actors[2]).toMatchObject({ name: 'Carol', role: 'Cameo' })
     })
+
+    it('detects chain conflict: A->B, B->C, C unchanged creates duplicate final name C', () => {
+      // Source groups: A, B, C
+      // Final names: A→B, B→C, C→C
+      // Both B and C end up at final name C → conflict for B (the edit)
+      const data = makeNfoData([
+        { name: 'A', role: 'Lead' },
+        { name: 'B', role: 'Support' },
+        { name: 'C', role: 'Cameo' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          A: { name: 'B' },
+          B: { name: 'C' }, // Conflicts because C is unchanged and also maps to C
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      // B conflicts because both B and C map to final name C
+      expect(conflicts).toContain('B')
+      expect(result.actors[0]).toMatchObject({ name: 'B', role: 'Lead' }) // A→B succeeds
+      expect(result.actors[1]).toMatchObject({ name: 'B', role: 'Support' }) // B unchanged due to conflict
+      expect(result.actors[2]).toMatchObject({ name: 'C', role: 'Cameo' })
+    })
+
+    it('valid swap/cycle still passes with final-mapping approach', () => {
+      // This is already tested above, but verify explicitly that swaps work
+      // A→B, B→A: source groups A,B → final names B,A (no duplicates)
+      const data = makeNfoData([
+        { name: 'A', role: 'Lead' },
+        { name: 'B', role: 'Support' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          A: { name: 'B' },
+          B: { name: 'A' },
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toEqual([])
+      expect(result.actors[0]).toMatchObject({ name: 'B', role: 'Lead' })
+      expect(result.actors[1]).toMatchObject({ name: 'A', role: 'Support' })
+    })
+
+    it('detects longer chain conflict: A->B, B->C, C->D, D unchanged', () => {
+      // Source groups: A, B, C, D
+      // Final names: A→B, B→C, C→D, D→D
+      // Both C and D end up at D → conflict for C
+      const data = makeNfoData([
+        { name: 'A', role: 'Lead' },
+        { name: 'B', role: 'Support' },
+        { name: 'C', role: 'Cameo' },
+        { name: 'D', role: 'Extra' },
+      ])
+      const ops = {
+        adds: [],
+        removals: [],
+        edits: {
+          A: { name: 'B' },
+          B: { name: 'C' },
+          C: { name: 'D' }, // Conflicts because D is unchanged
+        },
+      }
+
+      const { data: result, conflicts } = applyBatchActorOps(data, ops)
+
+      expect(conflicts).toContain('C')
+      expect(result.actors[0]).toMatchObject({ name: 'B', role: 'Lead' }) // A→B succeeds
+      expect(result.actors[1]).toMatchObject({ name: 'C', role: 'Support' }) // B→C succeeds
+      expect(result.actors[2]).toMatchObject({ name: 'C', role: 'Cameo' }) // C unchanged due to conflict
+      expect(result.actors[3]).toMatchObject({ name: 'D', role: 'Extra' })
+    })
   })
 
   describe('per-file collision detection', () => {
