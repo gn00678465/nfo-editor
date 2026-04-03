@@ -265,17 +265,35 @@ export default function App() {
   }, [])
 
   const handleBatchApply = useCallback(async (ops: BatchActorOps): Promise<ApplyResult[]> => {
+    // Capture state at start for stale reconciliation guard
+    const capturedSelectedPath = selectedFile?.filePath
+    const capturedCurrentData = currentData
+    const capturedDirtyFiles = new Set(dirtyFiles)
+
     setIsSaving(true)
     const results: ApplyResult[] = []
 
     try {
       for (const filePath of batchSelectedFiles) {
+        // Issue 2: Non-active dirty files cannot be safely batch-written
+        // If a file has unsaved changes and is not the current active file,
+        // skip it to avoid data loss or ambiguous state
+        if (capturedDirtyFiles.has(filePath) && filePath !== capturedSelectedPath) {
+          results.push({
+            filePath,
+            success: false,
+            conflicts: [],
+            error: 'File has unsaved changes. Please save or discard changes in the editor before applying batch operations.',
+          })
+          continue
+        }
+
         let data: NfoData | undefined
         let parseError: string | undefined
 
         // Use in-memory data if this is the currently selected file
-        if (selectedFile?.filePath === filePath && currentData) {
-          data = currentData
+        if (filePath === capturedSelectedPath && capturedCurrentData) {
+          data = capturedCurrentData
         } else {
           // Read from disk/browser handle
           let content: string | undefined
@@ -354,8 +372,11 @@ export default function App() {
         }
 
         if (writeSuccess) {
-          // Reconcile in-memory state if this is the active file
-          if (selectedFile?.filePath === filePath) {
+          // Issue 1: Async stale reconciliation guard
+          // Only reconcile in-memory state if the active file hasn't changed
+          // during the async operation
+          if (filePath === capturedSelectedPath && 
+              selectedFile?.filePath === capturedSelectedPath) {
             setCurrentData(updatedData)
             setOriginalData(updatedData)
             setIsDirty(false)
@@ -366,7 +387,7 @@ export default function App() {
             })
           }
           // Note: Do NOT clear dirtyFiles for non-active files.
-          // They may have unsaved in-memory drafts we cannot reconcile here.
+          // They were already filtered out by the guard above.
 
           results.push({
             filePath,
@@ -387,7 +408,7 @@ export default function App() {
     }
 
     return results
-  }, [batchSelectedFiles, selectedFile, currentData])
+  }, [batchSelectedFiles, selectedFile, currentData, dirtyFiles])
 
   // Fetch app version on mount
   useEffect(() => {
