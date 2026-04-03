@@ -188,6 +188,10 @@ export default function App() {
     setSelectedFile(file)
     selectedFileRef.current = file
     setSaveStatus('idle')
+    // Issue 1 fix: Clear editor data immediately to prevent showing previous file's content
+    setCurrentData(null)
+    setOriginalData(null)
+    setIsDirty(false)
 
     let content: string | undefined
     if (isElectron) {
@@ -199,8 +203,10 @@ export default function App() {
       if (!handle) {
         // Issue 1 fix: Guard against stale response
         if (requestId !== latestSelectRequestRef.current) return
-        setCurrentData(emptyNfoData())
+        const empty = emptyNfoData()
+        setCurrentData(empty)
         currentDataPathRef.current = file.filePath
+        setOriginalData(empty)
         setIsDirty(false)
         return
       }
@@ -279,18 +285,18 @@ export default function App() {
           setOriginalData(savedData)
           setSaveStatus('saved')
           setTimeout(() => setSaveStatus('idle'), 2000)
+          // Issue 2 fix: Only clear dirty state and update batch cache when save is current
+          setDirtyFiles(prev => {
+            const next = new Set(prev)
+            next.delete(savedFilePath)
+            return next
+          })
+          setBatchLoadedData(prev => (
+            prev[savedFilePath]
+              ? { ...prev, [savedFilePath]: savedData }
+              : prev
+          ))
         }
-        // Always clean up dirty state and update batch data for the file that was saved
-        setDirtyFiles(prev => {
-          const next = new Set(prev)
-          next.delete(savedFilePath)
-          return next
-        })
-        setBatchLoadedData(prev => (
-          prev[savedFilePath]
-            ? { ...prev, [savedFilePath]: savedData }
-            : prev
-        ))
       } else {
         // Only show error if the saved file is still active
         if (selectedFileRef.current?.filePath === savedFilePath) {
@@ -317,6 +323,10 @@ export default function App() {
       next.delete(selectedFile.filePath)
       return next
     })
+    // Issue 3 fix: Reconcile batch cache when discarding batch-selected file
+    if (batchSelectedRef.current.has(selectedFile.filePath)) {
+      setBatchLoadedData(prev => ({ ...prev, [selectedFile.filePath]: originalData }))
+    }
   }, [originalData, selectedFile])
 
   const handleBatchToggle = useCallback(() => {
