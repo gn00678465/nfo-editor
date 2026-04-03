@@ -106,6 +106,8 @@ export default function App() {
   const batchPreloadPendingRef = useRef<Set<string>>(new Set())
   // Track current batch selection for async validation
   const batchSelectedRef = useRef<Set<string>>(new Set())
+  // Issue 1 fix: Track latest handleSelectFile request to prevent stale-response race
+  const latestSelectRequestRef = useRef(0)
 
   useEffect(() => {
     batchLoadedDataRef.current = batchLoadedData
@@ -173,6 +175,9 @@ export default function App() {
   }, [])
 
   const handleSelectFile = useCallback(async (file: NfoFile) => {
+    // Issue 1 fix: Increment request counter to track latest selection
+    const requestId = ++latestSelectRequestRef.current
+
     setSelectedFile(file)
     selectedFileRef.current = file
     setSaveStatus('idle')
@@ -185,6 +190,8 @@ export default function App() {
     } else {
       const handle = fileHandles.current.get(file.filePath)
       if (!handle) {
+        // Issue 1 fix: Guard against stale response
+        if (requestId !== latestSelectRequestRef.current) return
         setCurrentData(emptyNfoData())
         currentDataPathRef.current = file.filePath
         setIsDirty(false)
@@ -193,6 +200,9 @@ export default function App() {
       const fileObj = await handle.getFile()
       content = await fileObj.text()
     }
+
+    // Issue 1 fix: Guard against stale response after async file read
+    if (requestId !== latestSelectRequestRef.current) return
 
     if (!content) {
       const empty = emptyNfoData()
@@ -223,11 +233,19 @@ export default function App() {
     setSaveStatus('idle')
     if (selectedFile) {
       setDirtyFiles(prev => new Set(prev).add(selectedFile.filePath))
+      // Issue 3 fix: Keep batchLoadedData in sync if active file is batch-selected
+      if (batchSelectedRef.current.has(selectedFile.filePath)) {
+        setBatchLoadedData(prev => ({ ...prev, [selectedFile.filePath]: updated }))
+      }
     }
   }, [selectedFile])
 
   const handleSave = useCallback(async () => {
     if (!selectedFile || !currentData || isSaving) return
+    // Issue 2 fix: Capture the file being saved for stale reconciliation guard
+    const savedFilePath = selectedFile.filePath
+    const savedData = currentData
+
     setIsSaving(true)
     try {
       const xml = serializeNfo(currentData)
@@ -247,25 +265,35 @@ export default function App() {
       }
 
       if (success) {
-        setIsDirty(false)
-        setOriginalData(currentData)
-        setSaveStatus('saved')
+        // Issue 2 fix: Only update UI state if the saved file is still active
+        if (selectedFileRef.current?.filePath === savedFilePath) {
+          setIsDirty(false)
+          setOriginalData(savedData)
+          setSaveStatus('saved')
+          setTimeout(() => setSaveStatus('idle'), 2000)
+        }
+        // Always clean up dirty state and update batch data for the file that was saved
         setDirtyFiles(prev => {
           const next = new Set(prev)
-          next.delete(selectedFile.filePath)
+          next.delete(savedFilePath)
           return next
         })
         setBatchLoadedData(prev => (
-          prev[selectedFile.filePath]
-            ? { ...prev, [selectedFile.filePath]: currentData }
+          prev[savedFilePath]
+            ? { ...prev, [savedFilePath]: savedData }
             : prev
         ))
-        setTimeout(() => setSaveStatus('idle'), 2000)
       } else {
-        setSaveStatus('error')
+        // Only show error if the saved file is still active
+        if (selectedFileRef.current?.filePath === savedFilePath) {
+          setSaveStatus('error')
+        }
       }
     } catch {
-      setSaveStatus('error')
+      // Only show error if the saved file is still active
+      if (selectedFileRef.current?.filePath === savedFilePath) {
+        setSaveStatus('error')
+      }
     } finally {
       setIsSaving(false)
     }
