@@ -89,7 +89,26 @@ export interface NfoData {
   criticrating?: string
   customrating?: string
   ratings: RatingEntry[]
+
+  // Unknown top-level XML elements preserved verbatim (e.g. <art>, <fileinfo>, <website>)
+  unknown?: Record<string, unknown>
 }
+
+const KNOWN_TOP_LEVEL_KEYS = new Set([
+  'plot', 'outline', 'originalplot',
+  'title', 'originaltitle', 'sorttitle',
+  'year', 'premiered', 'releasedate', 'release', 'runtime', 'mpaa', 'tagline',
+  'num', 'javdbsearchid',
+  'maker', 'publisher', 'label', 'series',
+  'poster', 'cover', 'fanart', 'thumb', 'trailer',
+  'lockdata', 'locktitle', 'watched',
+  'playcount', 'dateadded', 'lastplayed',
+  'userrating', 'criticrating', 'customrating',
+  'actor', 'genre', 'tag', 'country',
+  'director', 'writer', 'credits',
+  'studio', 'uniqueid',
+  'set', 'ratings',
+])
 
 const KNOWN_ARRAY_FIELDS = new Set([
   'tag', 'genre', 'actor', 'uniqueid', 'director', 'writer', 'credits', 'studio',
@@ -131,6 +150,15 @@ export function parseNfo(xmlContent: string): NfoData {
   const movie = parsed.movie || {}
 
   const g = (k: string) => getString(movie[k])
+
+  // Collect unknown top-level elements so we can round-trip them on save
+  const unknownFields: Record<string, unknown> = {}
+  for (const key of Object.keys(movie)) {
+    if (KNOWN_TOP_LEVEL_KEYS.has(key)) continue
+    if (key.startsWith('@_') || key === '#text') continue
+    unknownFields[key] = movie[key]
+  }
+  const unknown = Object.keys(unknownFields).length > 0 ? unknownFields : undefined
 
   // Parse actors
   const actors: Actor[] = ((movie.actor || []) as Record<string, unknown>[]).map(a => ({
@@ -253,6 +281,7 @@ export function parseNfo(xmlContent: string): NfoData {
     criticrating: g('criticrating'),
     customrating: g('customrating'),
     ratings,
+    unknown,
   }
 }
 
@@ -369,6 +398,15 @@ export function serializeNfo(data: NfoData): string {
         value: r.value,
         votes: r.votes,
       })),
+    }
+  }
+
+  // Re-emit unknown elements that were preserved from the input XML
+  if (data.unknown) {
+    for (const [key, value] of Object.entries(data.unknown)) {
+      if (!(key in movie)) {
+        movie[key] = value
+      }
     }
   }
 

@@ -846,6 +846,118 @@ describe('parse → serialize → parse roundtrip', () => {
 })
 
 // ---------------------------------------------------------------------------
+// 12b. Unknown XML preservation
+// ---------------------------------------------------------------------------
+
+describe('parseNfo / serializeNfo - unknown XML preservation', () => {
+  it('captures unknown top-level elements into data.unknown', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Sample</title>
+  <countrycode>JP</countrycode>
+  <art>
+    <poster>/data/movies/sample/poster.jpg</poster>
+  </art>
+  <website>https://example.com</website>
+</movie>`
+    const data = parseNfo(xml)
+
+    expect(data.unknown).toBeDefined()
+    expect(data.unknown).toHaveProperty('countrycode', 'JP')
+    expect(data.unknown).toHaveProperty('art')
+    expect(data.unknown).toHaveProperty('website', 'https://example.com')
+  })
+
+  it('omits unknown property when input has no unknown elements', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Sample</title>
+</movie>`
+    const data = parseNfo(xml)
+    expect(data.unknown).toBeUndefined()
+  })
+
+  it('round-trips unknown elements (art/fileinfo/website) intact', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Sample</title>
+  <art>
+    <poster>/data/movies/sample/poster.jpg</poster>
+  </art>
+  <fileinfo>
+    <streamdetails>
+      <video>
+        <codec>h264</codec>
+        <width>1920</width>
+        <height>1080</height>
+      </video>
+    </streamdetails>
+  </fileinfo>
+  <website>https://example.com</website>
+</movie>`
+    const original = parseNfo(xml)
+    const serialized = serializeNfo(original)
+
+    expect(serialized).toContain('<art>')
+    expect(serialized).toContain('<poster>/data/movies/sample/poster.jpg</poster>')
+    expect(serialized).toContain('<fileinfo>')
+    expect(serialized).toContain('<streamdetails>')
+    expect(serialized).toContain('<codec>h264</codec>')
+    expect(serialized).toContain('<width>1920</width>')
+    expect(serialized).toContain('<website>https://example.com</website>')
+
+    const reparsed = parseNfo(serialized)
+    expect(reparsed.unknown).toHaveProperty('art')
+    expect(reparsed.unknown).toHaveProperty('fileinfo')
+    expect(reparsed.unknown).toHaveProperty('website', 'https://example.com')
+  })
+
+  it('does not duplicate known fields into unknown', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Sample</title>
+  <actor>
+    <name>Alice</name>
+    <type>Actor</type>
+  </actor>
+  <genre>Drama</genre>
+  <countrycode>JP</countrycode>
+</movie>`
+    const data = parseNfo(xml)
+
+    expect(data.unknown).toBeDefined()
+    expect(data.unknown).not.toHaveProperty('actor')
+    expect(data.unknown).not.toHaveProperty('genre')
+    expect(data.unknown).not.toHaveProperty('title')
+    expect(data.unknown).toHaveProperty('countrycode', 'JP')
+  })
+
+  it('preserves unknown elements when serializer rewrites known fields', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Sample</title>
+  <actor>
+    <name>Alice</name>
+    <type>Actor</type>
+  </actor>
+  <fileinfo>
+    <streamdetails>
+      <video><codec>h264</codec></video>
+    </streamdetails>
+  </fileinfo>
+</movie>`
+    const data = parseNfo(xml)
+    // Mutate a known field
+    data.actors = [{ name: 'Bob', type: 'Actor' }]
+
+    const serialized = serializeNfo(data)
+    expect(serialized).toContain('<name>Bob</name>')
+    expect(serialized).toContain('<fileinfo>')
+    expect(serialized).toContain('<codec>h264</codec>')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // 13. NFO File Discovery (scanDir logic)
 // ---------------------------------------------------------------------------
 
