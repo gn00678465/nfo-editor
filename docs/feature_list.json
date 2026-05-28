@@ -1,0 +1,94 @@
+{
+  "$schema": "Feature state tracker for nfo-editor. status: planned | in-progress | done | deferred. evidence: commit SHA, PR, or verification note.",
+  "version": "1.2.0",
+  "features": [
+    {
+      "id": "feat-001",
+      "name": "NFO Parser",
+      "description": "parseNfo / serializeNfo with CDATA, ratings, uniqueid, set, fanart, boolean fields",
+      "dependencies": [],
+      "status": "done",
+      "evidence": "src/lib/__tests__/nfoParser.test.ts (97 tests)"
+    },
+    {
+      "id": "feat-002",
+      "name": "Single-file metadata editor",
+      "description": "Categorized field editor (Core Info, Plot, Classification, Credits, Production, Identifiers, Media, Advanced)",
+      "dependencies": ["feat-001"],
+      "status": "done",
+      "evidence": "src/components/MetadataEditor.tsx; manual verification"
+    },
+    {
+      "id": "feat-003",
+      "name": "Recursive NFO scanning",
+      "description": "scanNfoFiles IPC + FileList UI with SKIP_DIRS filter",
+      "dependencies": [],
+      "status": "done",
+      "evidence": "electron/main.ts, src/App.tsx, scanDir tests in nfoParser.test.ts"
+    },
+    {
+      "id": "feat-004",
+      "name": "Browser fallback",
+      "description": "File System Access API path for Chrome/Edge when not in Electron",
+      "dependencies": ["feat-001"],
+      "status": "done",
+      "evidence": "src/App.tsx scanNfoFilesFromDir + fileHandles map; commit 293df08"
+    },
+    {
+      "id": "feat-005",
+      "name": "Theme system",
+      "description": "Dark / light mode with persistent preference",
+      "dependencies": [],
+      "status": "done",
+      "evidence": "src/components/ThemeProvider.tsx, ThemeToggle.tsx; commit b6ef3a2"
+    },
+    {
+      "id": "feat-006",
+      "name": "Batch actor edit",
+      "description": "Multi-file actor remove / rename / add with fixpoint conflict detection",
+      "dependencies": ["feat-001", "feat-003"],
+      "status": "done",
+      "evidence": "PR #6 (fd73e59); src/components/BatchEditor.tsx; src/lib/batchOperations.ts; 38 tests in batchOperations.test.ts"
+    },
+    {
+      "id": "feat-007",
+      "name": "Unknown XML preservation",
+      "description": "parseNfo collects unrecognized top-level elements into data.unknown; serializeNfo re-emits them; cloneNfoData clones them",
+      "dependencies": ["feat-001"],
+      "status": "done",
+      "evidence": "commit a28d06b; 5 round-trip tests in nfoParser.test.ts; verified on Z:/Media/jellyfin/FC2-スレンダー/お嬢様フルート奏者 (5 files, <art>/<fileinfo>/<website> preserved byte-for-byte)"
+    },
+    {
+      "id": "feat-008",
+      "name": "Batch edit for genres / tags / studios",
+      "description": "Extend batch edit pattern to flat-string lists (lower complexity than actors)",
+      "dependencies": ["feat-006"],
+      "status": "planned",
+      "evidence": ""
+    },
+    {
+      "id": "feat-009",
+      "name": "Filter / search loaded files by metadata",
+      "description": "Reduce noise when batch-selecting across large folders",
+      "dependencies": ["feat-003"],
+      "status": "planned",
+      "evidence": ""
+    },
+    {
+      "id": "feat-010",
+      "name": "lockdata field surfaced in UI",
+      "description": "Already parsed; show as a per-field lock indicator to prevent accidental overwrite",
+      "dependencies": ["feat-002"],
+      "status": "planned",
+      "evidence": ""
+    },
+    {
+      "id": "feat-011",
+      "name": "E2E renderer tests",
+      "description": "Playwright coverage for select-edit-save and batch flows in App.tsx",
+      "dependencies": [],
+      "status": "planned",
+      "evidence": ""
+    }
+  ]
+}
