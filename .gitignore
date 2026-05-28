@@ -58,3 +58,7 @@ spec/fixtures/logo.png
 
 .yarn/install-state.gz
 dist-electron/
+
+
+# APM dependencies
+apm_modules/
