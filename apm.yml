@@ -1,0 +1,16 @@
+name: nfo-editor
+version: 1.0.0
+description: APM project for nfo-editor
+author: Madao
+# Which agent platforms to deploy to.
+# Resolution order: --target flag > this field > auto-detect from filesystem.
+# Accepted values: copilot, claude, cursor, opencode, codex, gemini, windsurf, all
+targets:
+- claude
+- copilot
+dependencies:
+  apm:
+    - vercel-labs/agent-skills/skills/react-best-practices
+  mcp: []
+includes: auto
+scripts: {}

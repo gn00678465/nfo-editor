@@ -52,6 +52,7 @@ function cloneNfoData(data: NfoData): NfoData {
     studios: [...data.studios],
     uniqueids: data.uniqueids.map(uniqueid => ({ ...uniqueid })),
     ratings: data.ratings.map(rating => ({ ...rating })),
+    unknown: data.unknown ? { ...data.unknown } : undefined,
   }
 }
 
